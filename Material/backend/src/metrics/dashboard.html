@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Metrics — Live</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11, 11, 11, 0.10);
+    --series-1:       #2a78d6;
+    --track:          #e1e0d9;
+    /* status tokens are fixed, never themed */
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --critical:       #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:          #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted:          #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255, 255, 255, 0.10);
+      --series-1:       #3987e5;
+      --track:          #2c2c2a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:          #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted:          #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255, 255, 255, 0.10);
+    --series-1:       #3987e5;
+    --track:          #2c2c2a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--plane);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 20px 56px; }
+
+  header {
+    display: flex; align-items: baseline; gap: 16px;
+    flex-wrap: wrap; margin-bottom: 22px;
+  }
+  h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .spacer { flex: 1 1 auto; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px 5px 9px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-1);
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.live { background: var(--good); }
+  .dot.down { background: var(--critical); }
+
+  button {
+    font: inherit; font-size: 12.5px; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { color: var(--text-primary); }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 13px; font-weight: 600; margin: 0 0 2px;
+    letter-spacing: 0.01em;
+  }
+  .card .hint { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+
+  /* ---- KPI row ---- */
+  .kpis {
+    display: grid; gap: 12px; margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 15px 16px 16px;
+  }
+  .tile .label {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--text-secondary); font-size: 12.5px; margin-bottom: 7px;
+  }
+  .tile .value { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; }
+  .tile .foot { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .tile.hero .value { font-size: 46px; line-height: 1.05; }
+  .tile.hero { grid-column: span 2; }
+  @media (max-width: 560px) { .tile.hero { grid-column: span 1; } }
+  /* wide enough for all six on one row: widen the hero instead of spanning,
+     otherwise the span pushes a seventh unit onto a second row */
+  @media (min-width: 1040px) {
+    .kpis { grid-template-columns: 1.7fr repeat(5, 1fr); }
+    .tile.hero { grid-column: span 1; }
+  }
+
+  /* ---- charts ---- */
+  .chart { width: 100%; display: block; }
+  .two-col {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-weight: 500; color: var(--muted);
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 0 10px 8px 0; border-bottom: 1px solid var(--grid);
+  }
+  td {
+    padding: 9px 10px 9px 0; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums;
+  }
+  td.route { font-variant-numeric: normal; }
+  th.num, td.num { text-align: right; padding-right: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  .bar-cell { width: 110px; }
+  .bar-track {
+    height: 8px; background: var(--track); border-radius: 4px; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0;
+  }
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+
+  .fail-list { list-style: none; margin: 0; padding: 0; }
+  .fail-list li {
+    display: flex; gap: 11px; align-items: baseline;
+    padding: 9px 0; border-bottom: 1px solid var(--grid);
+  }
+  .fail-list li:last-child { border-bottom: 0; }
+  .chip {
+    flex: none; min-width: 38px; text-align: center;
+    padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600;
+    font-variant-numeric: tabular-nums; border: 1px solid;
+  }
+  .chip.client { color: var(--warning); border-color: var(--warning); }
+  .chip.server { color: var(--critical); border-color: var(--critical); }
+  .fail-msg { color: var(--text-secondary); word-break: break-word; }
+  .fail-route { color: var(--muted); font-size: 12px; }
+
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+  details { margin-top: 14px; }
+  summary {
+    cursor: pointer; color: var(--muted); font-size: 12px;
+    padding: 4px 0; user-select: none;
+  }
+  summary:hover { color: var(--text-secondary); }
+  .mini-table { max-height: 220px; overflow-y: auto; margin-top: 8px; }
+
+  #tip {
+    position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.13); z-index: 10; white-space: nowrap;
+  }
+  #tip b { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div>
+      <h1>API Metrics</h1>
+      <div class="sub" id="uptime">Connecting…</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="status-pill">
+      <span class="dot down" id="conn-dot"></span>
+      <span id="conn-text">Connecting</span>
+    </span>
+    <button id="theme-btn" type="button">Dark</button>
+    <button id="reset-btn" type="button">Reset</button>
+  </header>
+
+  <section class="kpis">
+    <div class="tile hero">
+      <div class="label">Total requests</div>
+      <div class="value" id="k-total">—</div>
+      <div class="foot" id="k-total-foot">since start</div>
+    </div>
+    <div class="tile">
+      <div class="label"><span class="dot" style="background:var(--good)"></span>Successful</div>
+      <div class="value" id="k-success">—</div>
+      <div class="foot" id="k-success-foot">—</div>
+    </div>
+    <div class="tile">
+      <div class="label"><span class="dot" style="background:var(--critical)"></span>Failed</div>
+      <div class="value" id="k-failed">—</div>
+      <div class="foot" id="k-failed-foot">—</div>
+    </div>
+    <div class="tile">
+      <div class="label">Requests / min</div>
+      <div class="value" id="k-rpm">—</div>
+      <div class="foot" id="k-rpm-foot">—</div>
+    </div>
+    <div class="tile">
+      <div class="label">In flight</div>
+      <div class="value" id="k-inflight">—</div>
+      <div class="foot" id="k-inflight-foot">—</div>
+    </div>
+    <div class="tile">
+      <div class="label">Avg latency</div>
+      <div class="value" id="k-latency">—</div>
+      <div class="foot" id="k-latency-foot">—</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Requests per second</h2>
+    <p class="hint">Rolling 60-second window, newest on the right.</p>
+    <svg class="chart" id="rate-chart" role="img"
+         aria-label="Requests per second over the last 60 seconds"></svg>
+    <details>
+      <summary>Show as table</summary>
+      <div class="mini-table">
+        <table>
+          <thead><tr><th>Seconds ago</th><th class="num">Requests</th></tr></thead>
+          <tbody id="rate-table"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <div class="two-col">
+    <section class="card">
+      <h2>Responses by status class</h2>
+      <p class="hint">Counts since start. Class is named, not colour-coded.</p>
+      <svg class="chart" id="status-chart" role="img"
+           aria-label="Response counts by HTTP status class"></svg>
+    </section>
+
+    <section class="card">
+      <h2>Latency</h2>
+      <p class="hint">Milliseconds, from the last 1000 requests.</p>
+      <svg class="chart" id="latency-chart" role="img"
+           aria-label="Latency percentiles in milliseconds"></svg>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Cache</h2>
+    <p class="hint">
+      <strong>Loads</strong> is how often PostgreSQL was actually asked.
+      <strong>Coalesced</strong> is misses that waited on an in-flight load
+      instead of starting their own — those are the queries single-flight
+      avoided. A thundering herd shows up as loads climbing with misses.
+    </p>
+
+    <div class="kpis" style="margin-top:12px">
+      <div class="tile">
+        <div class="label">Reads</div>
+        <div class="value" id="c-reads">—</div>
+        <div class="foot" id="c-reads-foot">—</div>
+      </div>
+      <div class="tile">
+        <div class="label">Hit rate</div>
+        <div class="value" id="c-hitrate">—</div>
+        <div class="foot" id="c-hitrate-foot">—</div>
+      </div>
+      <div class="tile">
+        <div class="label">DB loads</div>
+        <div class="value" id="c-loads">—</div>
+        <div class="foot" id="c-loads-foot">—</div>
+      </div>
+      <div class="tile">
+        <div class="label">Queries avoided</div>
+        <div class="value" id="c-saved">—</div>
+        <div class="foot" id="c-saved-foot">—</div>
+      </div>
+    </div>
+
+    <svg class="chart" id="cache-chart" role="img"
+         aria-label="Cache reads broken down by outcome"></svg>
+
+    <table style="margin-top:10px">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th class="num">Reads</th>
+          <th class="num">Hits</th>
+          <th class="num">Miss</th>
+          <th class="num">Coalesced</th>
+          <th class="num">DB loads</th>
+          <th class="num">Hit %</th>
+          <th class="num">Load ms</th>
+        </tr>
+      </thead>
+      <tbody id="cache-rows"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Endpoints</h2>
+    <p class="hint">Sorted by traffic. Numeric ids are grouped, so /materials/1 and /materials/2 count as one endpoint.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th class="bar-cell" aria-label="Relative traffic"></th>
+          <th class="num">Hits</th>
+          <th class="num">OK</th>
+          <th class="num">Failed</th>
+          <th class="num">Avg ms</th>
+          <th class="num">Max ms</th>
+        </tr>
+      </thead>
+      <tbody id="endpoint-rows"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Recent failures</h2>
+    <p class="hint">Last 20, newest first.</p>
+    <ul class="fail-list" id="fail-rows"></ul>
+  </section>
+
+</div>
+
+<div id="tip"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var latest = null;
+  var tip = document.getElementById('tip');
+
+  // ---------- formatting ----------
+
+  function compact(n) {
+    if (n === null || n === undefined) return '—';
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+    return n.toLocaleString();
+  }
+
+  function ms(n) {
+    return n >= 100 ? Math.round(n) + 'ms' : (Math.round(n * 10) / 10) + 'ms';
+  }
+
+  function css(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function svgEl(name, attrs) {
+    var node = document.createElementNS('http://www.w3.org/2000/svg', name);
+    for (var key in attrs) node.setAttribute(key, attrs[key]);
+    return node;
+  }
+
+  /** Rounded at the data end, square at the baseline, per the mark spec. */
+  function barPath(x, y, w, h, r) {
+    var radius = Math.max(0, Math.min(r, w));
+    return 'M' + x + ',' + y +
+           'H' + (x + w - radius) +
+           'A' + radius + ',' + radius + ' 0 0 1 ' + (x + w) + ',' + (y + radius) +
+           'V' + (y + h - radius) +
+           'A' + radius + ',' + radius + ' 0 0 1 ' + (x + w - radius) + ',' + (y + h) +
+           'H' + x + 'Z';
+  }
+
+  /** Clean axis maximum: 1, 2, 5 × a power of ten, at or above the peak. */
+  function niceMax(value) {
+    if (value <= 0) return 1;
+    var power = Math.pow(10, Math.floor(Math.log10(value)));
+    var steps = [1, 2, 5, 10];
+    for (var i = 0; i < steps.length; i++) {
+      if (steps[i] * power >= value) return steps[i] * power;
+    }
+    return 10 * power;
+  }
+
+  function showTip(event, html) {
+    tip.innerHTML = html;
+    tip.style.opacity = '1';
+    var box = tip.getBoundingClientRect();
+    var left = event.clientX + 14;
+    if (left + box.width > window.innerWidth - 8) left = event.clientX - box.width - 14;
+    tip.style.left = left + 'px';
+    tip.style.top = (event.clientY - box.height - 10) + 'px';
+  }
+
+  function hideTip() { tip.style.opacity = '0'; }
+
+  // ---------- requests-per-second area chart ----------
+
+  function renderRate(metrics) {
+    var svg = document.getElementById('rate-chart');
+    var series = metrics.load.perSecond || [];
+    var width = svg.clientWidth || 700;
+    var height = 200;
+    var pad = { top: 14, right: 16, bottom: 26, left: 38 };
+
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.textContent = '';
+
+    var plotW = width - pad.left - pad.right;
+    var plotH = height - pad.top - pad.bottom;
+    var max = niceMax(Math.max.apply(null, series.concat([1])));
+    var stepX = series.length > 1 ? plotW / (series.length - 1) : plotW;
+
+    var x = function (i) { return pad.left + i * stepX; };
+    var y = function (v) { return pad.top + plotH - (v / max) * plotH; };
+
+    // gridlines + y ticks — solid hairlines, one step off the surface
+    [0, 0.5, 1].forEach(function (fraction) {
+      var value = max * fraction;
+      var yy = y(value);
+      svg.appendChild(svgEl('line', {
+        x1: pad.left, x2: width - pad.right, y1: yy, y2: yy,
+        stroke: fraction === 0 ? css('--axis') : css('--grid'), 'stroke-width': 1
+      }));
+      var label = svgEl('text', {
+        x: pad.left - 8, y: yy + 4, 'text-anchor': 'end',
+        fill: css('--muted'), 'font-size': 11
+      });
+      label.textContent = Math.round(value);
+      svg.appendChild(label);
+    });
+
+    var linePoints = series.map(function (v, i) { return x(i) + ',' + y(v); }).join(' ');
+
+    svg.appendChild(svgEl('polygon', {
+      points: pad.left + ',' + y(0) + ' ' + linePoints + ' ' + x(series.length - 1) + ',' + y(0),
+      fill: css('--series-1'), 'fill-opacity': 0.10
+    }));
+    svg.appendChild(svgEl('polyline', {
+      points: linePoints, fill: 'none', stroke: css('--series-1'),
+      'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+    }));
+
+    // end marker with a 2px surface ring so it stays legible over the line
+    var lastIndex = series.length - 1;
+    svg.appendChild(svgEl('circle', {
+      cx: x(lastIndex), cy: y(series[lastIndex]), r: 5,
+      fill: css('--series-1'), stroke: css('--surface-1'), 'stroke-width': 2
+    }));
+
+    // direct-label the current value only — never a number on every point
+    var current = svgEl('text', {
+      x: Math.min(x(lastIndex) + 9, width - pad.right),
+      y: Math.max(y(series[lastIndex]) - 9, pad.top + 9),
+      'text-anchor': 'end', fill: css('--text-secondary'),
+      'font-size': 12, 'font-weight': 600
+    });
+    current.textContent = series[lastIndex] + '/s';
+    svg.appendChild(current);
+
+    [[0, '60s ago'], [series.length - 1, 'now']].forEach(function (pair) {
+      var label = svgEl('text', {
+        x: x(pair[0]), y: height - 7, fill: css('--muted'), 'font-size': 11,
+        'text-anchor': pair[0] === 0 ? 'start' : 'end'
+      });
+      label.textContent = pair[1];
+      svg.appendChild(label);
+    });
+
+    // crosshair + tooltip across the whole plot, so no pinpoint targets
+    var crosshair = svgEl('line', {
+      y1: pad.top, y2: pad.top + plotH, stroke: css('--axis'),
+      'stroke-width': 1, opacity: 0
+    });
+    svg.appendChild(crosshair);
+
+    var surface = svgEl('rect', {
+      x: pad.left, y: pad.top, width: plotW, height: plotH, fill: 'transparent'
+    });
+    surface.addEventListener('mousemove', function (event) {
+      var bounds = svg.getBoundingClientRect();
+      var index = Math.round((event.clientX - bounds.left - pad.left) / stepX);
+      index = Math.max(0, Math.min(series.length - 1, index));
+      crosshair.setAttribute('x1', x(index));
+      crosshair.setAttribute('x2', x(index));
+      crosshair.setAttribute('opacity', 1);
+      var ago = series.length - 1 - index;
+      showTip(event, '<b>' + series[index] + '</b> req · ' +
+        (ago === 0 ? 'this second' : ago + 's ago'));
+    });
+    surface.addEventListener('mouseleave', function () {
+      crosshair.setAttribute('opacity', 0);
+      hideTip();
+    });
+    svg.appendChild(surface);
+
+    var rows = series.map(function (v, i) {
+      var ago = series.length - 1 - i;
+      return '<tr><td>' + (ago === 0 ? 'now' : ago + 's') +
+             '</td><td class="num">' + v + '</td></tr>';
+    }).reverse().join('');
+    document.getElementById('rate-table').innerHTML = rows;
+  }
+
+  // ---------- horizontal bar charts (one hue, direct-labelled) ----------
+
+  function renderBars(svgId, rows) {
+    var svg = document.getElementById(svgId);
+    var width = svg.clientWidth || 420;
+    var labelW = 132;
+    var valueW = 62;
+    var rowH = 34;
+    var barH = 12;
+    var height = Math.max(rows.length * rowH + 8, 60);
+
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    svg.textContent = '';
+
+    var plotW = Math.max(30, width - labelW - valueW);
+    var max = Math.max.apply(null, rows.map(function (r) { return r.value; }).concat([1]));
+
+    rows.forEach(function (row, i) {
+      var y = i * rowH + 8;
+
+      var label = svgEl('text', {
+        x: 0, y: y + barH, fill: css('--text-secondary'), 'font-size': 12.5
+      });
+      label.textContent = row.label;
+      svg.appendChild(label);
+
+      svg.appendChild(svgEl('rect', {
+        x: labelW, y: y + 2, width: plotW, height: barH,
+        rx: 4, fill: css('--track')
+      }));
+
+      var barW = row.value > 0 ? Math.max(3, (row.value / max) * plotW) : 0;
+      if (barW > 0) {
+        svg.appendChild(svgEl('path', {
+          d: barPath(labelW, y + 2, barW, barH, 4), fill: css('--series-1')
+        }));
+      }
+
+      var value = svgEl('text', {
+        x: width, y: y + barH, 'text-anchor': 'end',
+        fill: css('--text-primary'), 'font-size': 12.5, 'font-weight': 600
+      });
+      value.textContent = row.display !== undefined ? row.display : row.value.toLocaleString();
+      svg.appendChild(value);
+    });
+  }
+
+  function renderStatus(metrics) {
+    var classes = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 };
+    Object.keys(metrics.byStatus || {}).forEach(function (code) {
+      var bucket = Math.floor(Number(code) / 100) + 'xx';
+      if (bucket in classes) classes[bucket] += metrics.byStatus[code];
+    });
+
+    renderBars('status-chart', [
+      { label: '2xx Success', value: classes['2xx'] },
+      { label: '3xx Redirect', value: classes['3xx'] },
+      { label: '4xx Client error', value: classes['4xx'] },
+      { label: '5xx Server error', value: classes['5xx'] }
+    ]);
+  }
+
+  function renderLatency(metrics) {
+    var l = metrics.latencyMs;
+    renderBars('latency-chart', [
+      { label: 'Average', value: l.average, display: ms(l.average) },
+      { label: 'p50 median', value: l.p50, display: ms(l.p50) },
+      { label: 'p95', value: l.p95, display: ms(l.p95) },
+      { label: 'p99', value: l.p99, display: ms(l.p99) },
+      { label: 'Slowest', value: l.max, display: ms(l.max) }
+    ]);
+  }
+
+  // ---------- tables ----------
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+
+  function renderCache(metrics) {
+    var cache = metrics.cache || { totals: {}, byKey: [] };
+    var t = cache.totals || {};
+    var rows = cache.byKey || [];
+
+    document.getElementById('c-reads').textContent = compact(t.reads || 0);
+    document.getElementById('c-reads-foot').textContent =
+      (rows.length || 0) + ' key group' + (rows.length === 1 ? '' : 's');
+
+    document.getElementById('c-hitrate').textContent = (t.hitRate || 0) + '%';
+    document.getElementById('c-hitrate-foot').textContent =
+      (t.hits || 0) + ' hit · ' + (t.misses || 0) + ' miss';
+
+    document.getElementById('c-loads').textContent = compact(t.loads || 0);
+    document.getElementById('c-loads-foot').textContent = 'queries that reached PostgreSQL';
+
+    document.getElementById('c-saved').textContent = compact(t.coalesced || 0);
+    document.getElementById('c-saved-foot').textContent =
+      (t.herdCollapse || 0) + '% of misses collapsed';
+
+    renderBars('cache-chart', [
+      { label: 'Served from cache', value: t.hits || 0 },
+      { label: 'Coalesced (saved)', value: t.coalesced || 0 },
+      { label: 'Loaded from DB', value: t.loads || 0 },
+      { label: 'Invalidations', value: t.invalidations || 0 }
+    ]);
+
+    var body = document.getElementById('cache-rows');
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty">No cache activity yet.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows.map(function (row) {
+      return '<tr>' +
+        '<td>' + escapeHtml(row.key) + '</td>' +
+        '<td class="num">' + row.reads + '</td>' +
+        '<td class="num">' + row.hits + '</td>' +
+        '<td class="num">' + row.misses + '</td>' +
+        '<td class="num">' + row.coalesced + '</td>' +
+        '<td class="num">' + row.loads + '</td>' +
+        '<td class="num">' + row.hitRate + '%</td>' +
+        '<td class="num">' + row.avgLoadMs + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderEndpoints(metrics) {
+    var rows = metrics.byEndpoint || [];
+    var body = document.getElementById('endpoint-rows');
+
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="empty">No requests yet.</td></tr>';
+      return;
+    }
+
+    var max = rows[0].hits || 1;
+    body.innerHTML = rows.map(function (row) {
+      var pct = Math.max(3, (row.hits / max) * 100);
+      return '<tr>' +
+        '<td class="route code">' + escapeHtml(row.endpoint) + '</td>' +
+        '<td class="bar-cell"><div class="bar-track">' +
+          '<div class="bar-fill" style="width:' + pct + '%"></div></div></td>' +
+        '<td class="num">' + row.hits + '</td>' +
+        '<td class="num">' + row.success + '</td>' +
+        '<td class="num">' + row.failed + '</td>' +
+        '<td class="num">' + row.avgMs + '</td>' +
+        '<td class="num">' + row.maxMs + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderFailures(metrics) {
+    var rows = metrics.recentFailures || [];
+    var list = document.getElementById('fail-rows');
+
+    if (!rows.length) {
+      list.innerHTML = '<li class="empty">No failures recorded.</li>';
+      return;
+    }
+
+    list.innerHTML = rows.map(function (row) {
+      var kind = row.status >= 500 ? 'server' : 'client';
+      return '<li>' +
+        '<span class="chip ' + kind + '">' + row.status + '</span>' +
+        '<span><span class="fail-route code">' + escapeHtml(row.method) + ' ' +
+          escapeHtml(row.route) + '</span><br>' +
+          '<span class="fail-msg">' + escapeHtml(row.message || '—') + '</span></span>' +
+      '</li>';
+    }).join('');
+  }
+
+  // ---------- top-level render ----------
+
+  function render(metrics) {
+    latest = metrics;
+    renderCache(metrics);
+    var t = metrics.totals;
+
+    document.getElementById('uptime').textContent =
+      'Up ' + metrics.uptime.human + ' · counting since ' +
+      new Date(metrics.since).toLocaleTimeString();
+
+    document.getElementById('k-total').textContent = compact(t.requests);
+    document.getElementById('k-total-foot').textContent =
+      metrics.byEndpoint.length + ' endpoints touched · ' +
+      metrics.load.averagePerMinute + '/min average';
+
+    document.getElementById('k-success').textContent = compact(t.success);
+    document.getElementById('k-success-foot').textContent = t.successRate + '% of all requests';
+
+    document.getElementById('k-failed').textContent = compact(t.failed);
+    document.getElementById('k-failed-foot').textContent =
+      t.clientErrors + ' client · ' + t.serverErrors + ' server';
+
+    document.getElementById('k-rpm').textContent = compact(t.requests ? metrics.load.requestsPerMinute : 0);
+    document.getElementById('k-rpm-foot').textContent =
+      'peak ' + metrics.load.peakRequestsPerMinute + '/min';
+
+    document.getElementById('k-inflight').textContent = metrics.load.inFlight;
+    document.getElementById('k-inflight-foot').textContent =
+      'peak ' + metrics.load.peakInFlight + ' concurrent';
+
+    document.getElementById('k-latency').textContent = ms(metrics.latencyMs.average);
+    document.getElementById('k-latency-foot').textContent =
+      'p95 ' + ms(metrics.latencyMs.p95) + ' · max ' + ms(metrics.latencyMs.max);
+
+    renderRate(metrics);
+    renderStatus(metrics);
+    renderLatency(metrics);
+    renderEndpoints(metrics);
+    renderFailures(metrics);
+  }
+
+  // ---------- transport ----------
+
+  function setConnection(live, text) {
+    document.getElementById('conn-dot').className = 'dot ' + (live ? 'live' : 'down');
+    document.getElementById('conn-text').textContent = text;
+  }
+
+  var pollTimer = null;
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () {
+      fetch('/api/metrics')
+        .then(function (r) { return r.json(); })
+        .then(render)
+        .catch(function () { /* server down; the next tick retries */ });
+    }, 2000);
+  }
+
+  function stopPolling() {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  if (typeof io === 'function') {
+    var socket = io({ transports: ['websocket', 'polling'] });
+
+    socket.on('connect', function () {
+      stopPolling();
+      setConnection(true, 'Live');
+    });
+    socket.on('metrics', render);
+    socket.on('disconnect', function () {
+      setConnection(false, 'Reconnecting');
+      startPolling();
+    });
+    socket.on('connect_error', function () {
+      setConnection(false, 'Polling');
+      startPolling();
+    });
+  } else {
+    // socket.io client did not load — fall back to plain HTTP
+    setConnection(false, 'Polling');
+    startPolling();
+  }
+
+  // first paint without waiting for a push
+  fetch('/api/metrics').then(function (r) { return r.json(); }).then(render).catch(function () {});
+
+  // ---------- controls ----------
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    fetch('/api/metrics/reset', { method: 'POST' })
+      .then(function () { return fetch('/api/metrics'); })
+      .then(function (r) { return r.json(); })
+      .then(render);
+  });
+
+  var themeBtn = document.getElementById('theme-btn');
+  function prefersDark() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function currentlyDark() {
+    var stamped = document.documentElement.getAttribute('data-theme');
+    return stamped ? stamped === 'dark' : prefersDark();
+  }
+  function syncThemeButton() {
+    themeBtn.textContent = currentlyDark() ? 'Light' : 'Dark';
+  }
+  themeBtn.addEventListener('click', function () {
+    document.documentElement.setAttribute('data-theme', currentlyDark() ? 'light' : 'dark');
+    syncThemeButton();
+    if (latest) render(latest);
+  });
+  syncThemeButton();
+
+  // charts read pixel widths, so they must be redrawn when the layout changes
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (latest) render(latest); }, 120);
+  });
+})();
+</script>
+</body>
+</html>

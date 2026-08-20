@@ -1,0 +1,3779 @@
+{
+  "info": {
+    "name": "Material Master API (PostgreSQL + RBAC)",
+    "_postman_id": "8f3c1a20-6d4e-4a91-b7c2-0e5f9a1d3b74",
+    "description": "Material master backend — NestJS + PostgreSQL, JWT auth, role-based access control.\n\n## Conventions\n\n- Base URL is `{{baseUrl}}` (default `http://localhost:3000/api`).\n- Uploaded images are served from `{{fileBaseUrl}}/uploads/...`, **outside** the `/api` prefix.\n- Storage is PostgreSQL. The database, its tables and the four demo accounts are created on first boot.\n- All bodies are JSON.\n- Validation errors come back as `{ \"errors\": { \"fieldName\": \"message\" } }` with status 400.\n- Delete guards come back as `{ \"reason\": \"...\" }` with status 409.\n- Successful DELETE returns 204 with no body.\n- **Every request needs a bearer token.** Run one of the four logins in **Auth (start here)** first; it stores the token in `{{token}}` and the collection sends it automatically. Without one you get `401`; with the wrong role you get `403`.\n\n## Hierarchy\n\n```\ncategory --< subcategory --< subcategory --< ... --< material\n```\n\nCategories and sub-categories are separate resources. Sub-categories **nest inside each other with no depth limit** via `parentId`.\n\nSeeded example, 3 levels deep:\n\n```\nSteel & Metals            (category 1)\n  Pipes                   (sub-category 2, parentId null)\n    Square Hollow Section (sub-category 3, parentId 2)\n```\n\n**Placing a sub-category** — send `parentId` to nest it, or `categoryId` to put it at the top of a category:\n\n- `parentId` alone → `categoryId` is derived from the parent.\n- Both → they must agree, or 400.\n- `categoryId` alone → sits directly under the category (`parentId: null`).\n\nEvery sub-category response carries `depth` and `path` (category name first), so you can render a tree without walking `parentId` yourself.\n\n**Placing a material** — same idea, and it can hang off a sub-category at any depth:\n\n- `subcategoryId` alone → `categoryId` is derived.\n- Both → must agree, or 400.\n- `categoryId` alone → sits directly under the category.\n\n## Chaining\n\nCreate requests save the new record's id into collection variables (`categoryId`, `subcategoryId`, `childId`, `materialId`), so the GET/PUT/DELETE requests below them work without editing anything. Run the folders top to bottom.\n\n## Register\n\nSee the **Register (new user)** folder. `POST /auth/register` takes the whole \"Add New User\" form as `multipart/form-data` — first/last name, email, phone, password, role, status, departments, project assignment, reporting-to, plus a profile image and a digital signature.\n\nPublic sign-up defaults to `viewer` and cannot request `admin`. The admin-only `POST /users` takes the same body with no such limit.\n\n## RBAC\n\nFour seeded accounts, **all with the password `123456`**:\n\n| Email | Role | What it is for |\n| --- | --- | --- |\n| `suhana@gmail.com` | `admin` | everything, plus the user directory |\n| `category@gmail.com` | `category_manager` | **adds categories and sub-categories** |\n| `material@gmail.com` | `material_manager` | **adds materials** |\n| `viewer@gmail.com` | `viewer` | read-only |\n\nThose four are **seeded rows in the `roles` table**, not hardcoded. Add your own in **Roles & Permissions** and it works everywhere a role is accepted.\n\nPermissions are named `module:action` (`category:create`, `material:delete`, …)\nand live in the `role_permissions` table — one row per role per module, four\ntoggles wide. Controllers ask for permissions, never for roles, so re-cutting\na role is a change in the **Roles & Permissions** screen, not in the code.\n\nBecause the guards read them per request, a toggle applies to already-issued\ntokens on their very next call.\n\n| | admin | category_manager | material_manager | viewer |\n| --- | :-: | :-: | :-: | :-: |\n| read categories / sub-categories / materials | ✅ | ✅ | ✅ | ✅ |\n| write categories + sub-categories | ✅ | ✅ | ❌ | ❌ |\n| write materials | ✅ | ❌ | ✅ | ❌ |\n| manage users | ✅ | ❌ | ❌ | ❌ |\n\nA denied request answers `403` and names what was missing:\n\n```json\n{\n  \"statusCode\": 403,\n  \"error\": \"Forbidden\",\n  \"message\": \"Your role 'category_manager' is not allowed to perform this action\",\n  \"requiredPermissions\": \"material:create\",\n  \"role\": \"category_manager\"\n}\n```\n\n### Suggested run order\n\n1. **Auth > Login as Category Manager** → run the **Categories** and **Sub-categories** folders.\n2. **Auth > Login as Material Manager** → run the **Materials** folder.\n3. **Auth > Login as Admin** → run the **Users** folder.\n4. **Auth > Login as Viewer** → every write in any folder now answers 403.\n\nThe `(403)` requests at the bottom of each folder pin a specific role's\ntoken, so they demonstrate the denial no matter who is currently signed in.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "subcategoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "childId",
+      "value": "3",
+      "type": "string"
+    },
+    {
+      "key": "materialId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "materialToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "viewerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "newUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fileBaseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "departmentId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "roleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "moduleId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "childDepartmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "herdBefore",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "herdBeforeMs",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "burstSize",
+      "value": "100",
+      "type": "string"
+    },
+    {
+      "key": "burstMs",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "burstOk",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth (start here)",
+      "description": "Four seeded accounts, one per role — **all use the password `123456`**.\n\n| Email | Role | Can do |\n| --- | --- | --- |\n| `suhana@gmail.com` | `admin` | everything, including users |\n| `category@gmail.com` | `category_manager` | add/edit/delete categories + sub-categories |\n| `material@gmail.com` | `material_manager` | add/edit/delete materials |\n| `viewer@gmail.com` | `viewer` | read only |\n\nRun one of the four logins first — it stores the token in `{{token}}`, which the whole collection sends automatically.",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"suhana@gmail.com\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in as **admin**.\n\nSaves `accessToken` into `{{adminToken}}` **and** into `{{token}}`, which every other request in this collection sends as `Authorization: Bearer`. Run this request to \"become\" this role, then run any folder below.\n\nResponse: `{ message, accessToken, tokenType, expiresIn, expiresAt, user }` where `user.permissions` lists exactly what this role may do.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('role is admin', () => pm.expect(body.user.role).to.eql('admin'));",
+                  "pm.test('password is not returned', () => pm.expect(body.user).to.not.have.property('password'));",
+                  "pm.collectionVariables.set('adminToken', body.accessToken);",
+                  "pm.collectionVariables.set('token', body.accessToken);",
+                  "pm.test('admin can manage users', () => pm.expect(body.user.permissions).to.include('user:create'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Category Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"category@gmail.com\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in as **category_manager**.\n\nSaves `accessToken` into `{{categoryToken}}` **and** into `{{token}}`, which every other request in this collection sends as `Authorization: Bearer`. Run this request to \"become\" this role, then run any folder below.\n\nResponse: `{ message, accessToken, tokenType, expiresIn, expiresAt, user }` where `user.permissions` lists exactly what this role may do.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('role is category_manager', () => pm.expect(body.user.role).to.eql('category_manager'));",
+                  "pm.test('password is not returned', () => pm.expect(body.user).to.not.have.property('password'));",
+                  "pm.collectionVariables.set('categoryToken', body.accessToken);",
+                  "pm.collectionVariables.set('token', body.accessToken);",
+                  "pm.test('may create categories', () => pm.expect(body.user.permissions).to.include('category:create'));",
+                  "pm.test('may NOT create materials', () => pm.expect(body.user.permissions).to.not.include('material:create'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Material Manager",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"material@gmail.com\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in as **material_manager**.\n\nSaves `accessToken` into `{{materialToken}}` **and** into `{{token}}`, which every other request in this collection sends as `Authorization: Bearer`. Run this request to \"become\" this role, then run any folder below.\n\nResponse: `{ message, accessToken, tokenType, expiresIn, expiresAt, user }` where `user.permissions` lists exactly what this role may do.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('role is material_manager', () => pm.expect(body.user.role).to.eql('material_manager'));",
+                  "pm.test('password is not returned', () => pm.expect(body.user).to.not.have.property('password'));",
+                  "pm.collectionVariables.set('materialToken', body.accessToken);",
+                  "pm.collectionVariables.set('token', body.accessToken);",
+                  "pm.test('may create materials', () => pm.expect(body.user.permissions).to.include('material:create'));",
+                  "pm.test('may NOT create categories', () => pm.expect(body.user.permissions).to.not.include('category:create'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Viewer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"viewer@gmail.com\",\n  \"password\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Signs in as **viewer**.\n\nSaves `accessToken` into `{{viewerToken}}` **and** into `{{token}}`, which every other request in this collection sends as `Authorization: Bearer`. Run this request to \"become\" this role, then run any folder below.\n\nResponse: `{ message, accessToken, tokenType, expiresIn, expiresAt, user }` where `user.permissions` lists exactly what this role may do.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('role is viewer', () => pm.expect(body.user.role).to.eql('viewer'));",
+                  "pm.test('password is not returned', () => pm.expect(body.user).to.not.have.property('password'));",
+                  "pm.collectionVariables.set('viewerToken', body.accessToken);",
+                  "pm.collectionVariables.set('token', body.accessToken);",
+                  "pm.test('read only', () => pm.expect(body.user.permissions.every(p => p.endsWith(':read'))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - wrong password (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"suhana@gmail.com\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Expected: `401 { \"message\": \"Invalid email or password\" }`.\n\nAn unknown email gives the same message, so the response cannot be used to find out which addresses are registered.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Who am I (GET /auth/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The signed-in user plus the permission list for their role. Any logged-in role may call it.\n\n**401** if `{{token}}` is empty or expired."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('has a role', () => pm.expect(pm.response.json()).to.have.property('role'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My permissions (GET /auth/permissions)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "permissions"
+              ]
+            },
+            "description": "Just `{ role, permissions }` — handy for a frontend deciding which buttons to render."
+          }
+        },
+        {
+          "name": "Role catalogue (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "roles"
+              ]
+            },
+            "description": "Every role, its description and its permissions. Public, so a login screen can explain the roles before anyone signs in.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Change my password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"123456\",\n  \"newPassword\": \"new-secret-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Changes the password of whoever `{{token}}` belongs to.\n\n**400** `{ \"errors\": { \"currentPassword\": \"Current password is incorrect\" } }`.\n\n⚠️ Running this really does change the seeded password — change it back, or delete `data/db.json` to reseed."
+          }
+        },
+        {
+          "name": "No token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Every business route is protected. Without a bearer token:\n\n`401 { \"message\": \"Missing bearer token. Call POST /api/auth/login first.\" }`",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Register (new user)",
+      "description": "The \"Add New User\" form, end to end.\n\n**Send it as `form-data`, not raw JSON** — that is what carries the profile image and the digital signature. In Postman the two file rows show a \"Select Files\" button; leave them empty to register without images.\n\nThe multi-selects (`departmentIds`, `projectIds`, `managerIds`) accept `1,2,3`, `[1,2,3]`, or a repeated key.\n\nPublic sign-up defaults to the `viewer` role and **refuses `admin`** — only an existing admin can grant that, through `POST /users`.",
+      "item": [
+        {
+          "name": "Form lookups (departments + projects)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/lookups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "lookups"
+              ]
+            },
+            "description": "Fills the \"Departments\" and \"Project assignment\" dropdowns. Public, because the sign-up page renders them before anyone has a token.\n\nSaves the first of each into `{{departmentId}}` / `{{projectId}}`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.departments?.[0]) pm.collectionVariables.set('departmentId', body.departments[0].id);",
+                  "if (body.projects?.[0]) pm.collectionVariables.set('projectId', body.projects[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Manager options (reporting to)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/managers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "managers"
+              ]
+            },
+            "description": "Active users, for the \"Reporting to\" picker. Needs `user:read`, so run **Auth > Login as Admin** first.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Register a user (form-data + files)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Neha",
+                  "type": "text",
+                  "description": "required"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Kulkarni",
+                  "type": "text",
+                  "description": "required"
+                },
+                {
+                  "key": "email",
+                  "value": "neha.kulkarni@gmail.com",
+                  "type": "text",
+                  "description": "required, unique"
+                },
+                {
+                  "key": "password",
+                  "value": "neha123",
+                  "type": "text",
+                  "description": "required, min 6 characters"
+                },
+                {
+                  "key": "phone",
+                  "value": "9876543210",
+                  "type": "text",
+                  "description": "optional, exactly 10 digits"
+                },
+                {
+                  "key": "role",
+                  "value": "material_manager",
+                  "type": "text",
+                  "description": "optional, defaults to viewer. admin is refused here."
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "type": "text",
+                  "description": "optional, Active | Inactive"
+                },
+                {
+                  "key": "departmentIds",
+                  "value": "1,2",
+                  "type": "text",
+                  "description": "ids from GET /users/lookups. \"1,2\" or \"[1,2]\" both work."
+                },
+                {
+                  "key": "projectIds",
+                  "value": "1,2",
+                  "type": "text",
+                  "description": "ids from GET /users/lookups"
+                },
+                {
+                  "key": "managerIds",
+                  "value": "1",
+                  "type": "text",
+                  "description": "\"Reporting to\" — ids from GET /users/managers"
+                },
+                {
+                  "key": "profileImage",
+                  "src": [],
+                  "type": "file",
+                  "description": "optional image, max 2 MB — pick a file in Postman"
+                },
+                {
+                  "key": "signature",
+                  "src": [],
+                  "type": "file",
+                  "description": "optional image, max 2 MB — the digital signature"
+                }
+              ]
+            },
+            "description": "Creates the account and returns it with everything resolved: `name`, `permissions`, the linked `departments` / `projects` / `reportingTo` rows, and `profileImageUrl` / `signatureUrl`.\n\nThe password is hashed with scrypt before it is stored and is never returned.\n\nSaves the new id into `{{newUserId}}`.\n\n**400** `{ \"errors\": { \"email\": \"A user with this email already exists\" } }`",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('registered', () => pm.response.to.have.status(201));",
+                  "const user = pm.response.json().user;",
+                  "pm.test('password never comes back', () => pm.expect(user).to.not.have.property('password'));",
+                  "pm.test('name is joined from first + last', () => pm.expect(user.name).to.eql('Neha Kulkarni'));",
+                  "pm.test('multi-selects were linked', () => {",
+                  "  pm.expect(user.departments).to.be.an('array');",
+                  "  pm.expect(user.projects).to.be.an('array');",
+                  "  pm.expect(user.reportingTo).to.be.an('array');",
+                  "});",
+                  "if (user.id) pm.collectionVariables.set('newUserId', user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as the new user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"neha.kulkarni@gmail.com\",\n  \"password\": \"neha123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Proves the registration produced a working account. Sets `{{token}}`, so anything you run next runs as this user and its role.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('token', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open the uploaded profile image",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{fileBaseUrl}}/uploads/profile-images/REPLACE-WITH-FILENAME.png",
+              "host": [
+                "{{fileBaseUrl}}/uploads/profile-images/REPLACE-WITH-FILENAME.png"
+              ]
+            },
+            "description": "Uploaded files are served from disk at `/uploads/...` — note that is outside the `/api` prefix, so it uses `{{fileBaseUrl}}`.\n\nCopy the `profileImageUrl` from the register response into the path above. Registering without an image leaves that field `null`.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Register - duplicate email (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Neha",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Kulkarni",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "neha.kulkarni@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "neha123",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Expected: `400 { \"errors\": { \"email\": \"A user with this email already exists\" } }`",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Register - self-assigned admin (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Sneaky",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "User",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "sneaky@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "sneaky123",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "admin",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Public sign-up cannot mint an admin — otherwise anyone could POST their way to full access.\n\n`400 { \"errors\": { \"role\": \"Sign-up cannot request the admin role. An admin has to grant it.\" } }`",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Register - bad phone and short password (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Bad",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Input",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "bad.input@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "abc",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "12345",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "Every broken field is reported at once, not one per request:\n\n```json\n{\n  \"errors\": {\n    \"password\": \"Password must be at least 6 characters\",\n    \"phone\": \"Phone number must be exactly 10 digits\"\n  }\n}\n```",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Register - unknown department id (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Ghost",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Dept",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "ghost.dept@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "ghost123",
+                  "type": "text"
+                },
+                {
+                  "key": "departmentIds",
+                  "value": "99999",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "The ids in the multi-selects are checked against the database, and the missing ones are named:\n\n`400 { \"errors\": { \"departmentIds\": \"Unknown department: 99999\" } }`",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Register - non-image upload (400)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Bad",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "File",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "bad.file@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "file123",
+                  "type": "text"
+                },
+                {
+                  "key": "profileImage",
+                  "src": [],
+                  "type": "file",
+                  "description": "pick a .txt or .pdf to see this fail"
+                }
+              ]
+            },
+            "description": "Only images are accepted, and only up to 2 MB (`UPLOAD_MAX_BYTES`):\n\n`400 { \"errors\": { \"profileImage\": \"Only image files are allowed (.png, .jpg, .jpeg, .gif, .webp, .svg)\" } }`",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (admin only)",
+      "description": "The user directory. Every route needs a `user:*` permission, which only `admin` holds — the other three roles get **403** here.\n\nRun **Auth > Login as Admin** first.",
+      "item": [
+        {
+          "name": "List users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?query=&role=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "",
+                  "description": "matches name and email"
+                },
+                {
+                  "key": "role",
+                  "value": "",
+                  "description": "admin | category_manager | material_manager | viewer"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Active | Inactive"
+                }
+              ]
+            },
+            "description": "Passwords are never returned; each row carries the role and its resolved `permissions`. All three query params are optional."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('no passwords leak', () => pm.response.json().forEach(u => pm.expect(u).to.not.have.property('password')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "description": "**404** when the id does not exist."
+          }
+        },
+        {
+          "name": "Create user (Add New User form)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Deepak",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Rao",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "deepak.rao@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "deepak123",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "9123456780",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "category_manager",
+                  "type": "text",
+                  "description": "an admin may set any role here, including admin"
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "type": "text"
+                },
+                {
+                  "key": "departmentIds",
+                  "value": "{{departmentId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "projectIds",
+                  "value": "{{projectId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "managerIds",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "profileImage",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "key": "signature",
+                  "src": [],
+                  "type": "file"
+                }
+              ]
+            },
+            "description": "The admin-facing twin of `POST /auth/register`: identical body, but this one may hand out **any** role, `admin` included.\n\nSaves the new id into `{{newUserId}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('newUserId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update user (full replace)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "firstName",
+                  "value": "Deepak",
+                  "type": "text"
+                },
+                {
+                  "key": "lastName",
+                  "value": "Rao",
+                  "type": "text"
+                },
+                {
+                  "key": "email",
+                  "value": "deepak.rao@gmail.com",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "9123456780",
+                  "type": "text"
+                },
+                {
+                  "key": "role",
+                  "value": "viewer",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "type": "text"
+                },
+                {
+                  "key": "departmentIds",
+                  "value": "{{departmentId}}",
+                  "type": "text",
+                  "description": "send it empty to clear every department"
+                },
+                {
+                  "key": "projectIds",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "managerIds",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true,
+                  "description": "enable to reset the password; omit to leave it alone"
+                },
+                {
+                  "key": "profileImage",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "key": "signature",
+                  "src": [],
+                  "type": "file"
+                }
+              ]
+            },
+            "description": "A true full replace of the form.\n\n- **Multi-selects**: sent empty → cleared. That is how the UI says \"nothing selected\".\n- **Password**: omitted → unchanged. Editing a user does not force a password reset.\n- **Images**: no new file → the stored one is kept.\n\n**409** when it would demote the last active admin, or when an admin aims it at their own role or status."
+          }
+        },
+        {
+          "name": "Change a role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{newUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{newUserId}}",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"category_manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The shortcut for \"move this person to another role\". Takes effect on their **next request** — permissions are resolved per request, not baked into the token.\n\n**409** `{ \"reason\": \"You cannot change your own role\" }`."
+          }
+        },
+        {
+          "name": "Deactivate / re-activate a user",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{newUserId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{newUserId}}",
+                "status"
+              ]
+            },
+            "description": "Flips `Active` <-> `Inactive`. An inactive user keeps their record but login answers **401 \"This account is inactive\"**.\n\n**409** when it would leave no active admin, or when you aim it at yourself."
+          }
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "description": "**204** on success.\n\n**409** `{ \"reason\": \"You cannot delete your own account\" }` or `{ \"reason\": \"This is the last active admin...\" }`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Last-admin guard (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"viewer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Demoting the only active admin would lock everyone out of the user directory for good, so it is refused:\n\n`409 { \"reason\": \"You cannot change your own role\" }`",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List users as Category Manager (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Uses `{{categoryToken}}` regardless of who is currently signed in. Expected:\n\n```json\n{\n  \"statusCode\": 403,\n  \"error\": \"Forbidden\",\n  \"message\": \"Your role 'category_manager' is not allowed to perform this action\",\n  \"requiredPermissions\": \"user:read\",\n  \"role\": \"category_manager\"\n}\n```\n\nRun **Auth > Login as Category Manager** once first so the variable is set.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{categoryToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Roles & Permissions",
+      "description": "**Roles are database rows, not an enum in the code.** Creating \"Site Engineer\" here immediately makes `site_engineer` a role a user can be given, and the grid you submit for it is what the guards check.\n\n### The grid\n\nOne row per module, four toggles wide — READ / WRITE / UPDATE / DELETE. Each toggle that is on becomes a `module:action` permission string:\n\n| Toggle | Permission |\n| --- | --- |\n| READ | `material:read` |\n| WRITE | `material:create` |\n| UPDATE | `material:update` |\n| DELETE | `material:delete` |\n\nA module with **no row** is simply not configured for the role — that is what the trash icon does, as opposed to turning all four toggles off.\n\n### It applies immediately\n\nPermissions are read per request, so flipping a toggle changes what an already-issued token can do on its **very next call**. Nobody has to log back in. Same for moving a user to a different role.\n\nRun **Auth > Login as Admin** first — every route here needs `role:*`.",
+      "item": [
+        {
+          "name": "List roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles?query=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "",
+                  "description": "matches the role name"
+                }
+              ]
+            },
+            "description": "The left-hand list. Each role carries its `color` swatch, `userCount` (how many people hold it) and `moduleCount` (rows in its grid).\n\nSaves the first non-system role into `{{roleId}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const custom = body.find(r => !r.isSystem);",
+                  "if (custom) pm.collectionVariables.set('roleId', custom.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Module catalogue (for ADD PERMISSION)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/modules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "modules"
+              ]
+            },
+            "description": "Everything the grid can switch on, with the grey `group` label above each name. Only modules with real guarded routes are listed, so no toggle is decorative.\n\nSaves the Materials module into `{{moduleId}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const mat = body.find(m => m.key === 'material');",
+                  "if (mat) pm.collectionVariables.set('moduleId', mat.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Colour palette (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/colors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "colors"
+              ]
+            },
+            "description": "The eleven swatches on \"IDENTIFY WITH COLOR\". Any valid `#RRGGBB` is accepted when creating a role — this list is only what the UI paints.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create New Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Site Engineer\",\n  \"color\": \"#00C875\",\n  \"description\": \"Runs work at site level\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The \"Create New Role\" dialog: a name and a colour.\n\nThe slug the JWT will carry is derived from the name — `Site Engineer` becomes `site_engineer`. A **new role holds no permissions at all** until you submit its grid.\n\nSaves the id into `{{roleId}}`.\n\n**400** on a duplicate name, on two names that collapse to the same slug, or on a colour that is not hex."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('slug derived from the name', () => pm.expect(body.slug).to.eql('site_engineer'));",
+                  "pm.test('starts with nothing granted', () => pm.expect(body.grants).to.eql([]));",
+                  "if (body.id) pm.collectionVariables.set('roleId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get a role + its Configured Permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}"
+              ]
+            },
+            "description": "The right-hand panel. `permissions` is the grid as rendered — one row per module with the four booleans. `grants` is the same thing flattened into the permission strings the guards actually compare, which is handy when you are debugging a 403."
+          }
+        },
+        {
+          "name": "ADD PERMISSION (one module row)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}",
+                "permissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleId\": \"{{moduleId}}\",\n  \"read\": true,\n  \"write\": true,\n  \"update\": true,\n  \"delete\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Adds a single row to the grid. Re-posting the same `moduleId` updates that row rather than failing, so it doubles as \"flip one toggle\".\n\nOmitted booleans default to false (`read` defaults to true)."
+          }
+        },
+        {
+          "name": "SUBMIT PERMISSIONS (whole grid)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}",
+                "permissions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    {\n      \"moduleId\": \"{{moduleId}}\",\n      \"read\": true,\n      \"write\": true,\n      \"update\": true,\n      \"delete\": true\n    },\n    {\n      \"moduleId\": 1,\n      \"read\": true,\n      \"write\": false,\n      \"update\": false,\n      \"delete\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The SUBMIT PERMISSIONS button. **The posted list becomes the entire grid** — any module you leave out is removed from the role.\n\nTakes effect on the next request from anyone holding this role, with no re-login.\n\n**409** if you try to strip the built-in Admin role of read+update on Users or Roles — that would lock everyone out of permissions for good."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('grid replaced', () => pm.expect(body.permissions).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove a grid row (trash icon)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}/permissions/{{moduleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}",
+                "permissions",
+                "{{moduleId}}"
+              ]
+            },
+            "description": "Un-configures that module for the role entirely — different from turning its four toggles off, though the effect on access is the same.\n\n**404** if the module was not configured for this role to begin with."
+          }
+        },
+        {
+          "name": "Rename / recolour a role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Site Supervisor\",\n  \"color\": \"#F59E0B\",\n  \"description\": \"Supervises site work\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Full replace of the role card. Renaming changes the slug too, and the foreign key carries every user on that role along with it — nobody is orphaned.\n\nThe built-in Admin role keeps its `admin` slug no matter what you call it, since the lockout guards name it."
+          }
+        },
+        {
+          "name": "DELETE ROLE",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/roles/{{roleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles",
+                "{{roleId}}"
+              ]
+            },
+            "description": "**204** on success.\n\n**409** when the role is built in, when users still hold it (the message counts them), or when deleting it would leave nobody able to manage roles at all."
+          }
+        },
+        {
+          "name": "Create role as Viewer (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should Not Exist\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Managing roles needs `role:create`, which only Admin holds out of the box. Run **Auth > Login as Viewer** once first.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{viewerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Departments",
+      "description": "The Departments tab. Departments **nest** through `parentId` with no depth limit, exactly like sub-categories — the table's PARENT DEPARTMENT column is `parentName`, which is `null` (rendered `-`) for a top-level row.\n\nEvery response also carries `depth`, `path` (the full trail), `userCount` and `childCount`, so the table can show the hierarchy and warn before a delete without extra calls.",
+      "item": [
+        {
+          "name": "List departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments?query=&status=&parentId=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "",
+                  "description": "matches name and code"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Active | Inactive"
+                },
+                {
+                  "key": "parentId",
+                  "value": "",
+                  "description": "only children of one department"
+                }
+              ]
+            },
+            "description": "Ordered by path, so children always sit under their parent.\n\nSaves the first row into `{{departmentId}}`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body[0]) pm.collectionVariables.set('departmentId', body[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add New Department (top level)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Civil\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PARENT DEPARTMENT left as \"None\" — send no `parentId` (or `null`).\n\nSaves the id into `{{departmentId}}`.\n\n**400** `{ \"errors\": { \"name\": \"A department with this name already exists\" } }`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('top level', () => pm.expect(body.parentId).to.eql(null));",
+                  "if (body.id) pm.collectionVariables.set('departmentId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add New Department (under a parent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Structural\",\n  \"parentId\": \"{{departmentId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "A parent was picked in the dropdown. The response comes back with `depth: 2`, `parentName` filled in and `path: [\"Civil\", \"Structural\"]`.\n\nSaves the id into `{{childDepartmentId}}`.\n\n**400** `{ \"errors\": { \"parentId\": \"Selected parent department does not exist\" } }`"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('nested one level', () => pm.expect(body.depth).to.eql(2));",
+                  "if (body.id) pm.collectionVariables.set('childDepartmentId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get department by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "description": "**404** when the id does not exist."
+          }
+        },
+        {
+          "name": "Children of a department",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}/children",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}",
+                "children"
+              ]
+            },
+            "description": "Direct children only, not the whole sub-tree."
+          }
+        },
+        {
+          "name": "Update department (full replace)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Civil\",\n  \"code\": \"CIV\",\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Full replace. Omitting `parentId` moves the department back to the top level — that is what \"None\" in the dropdown means."
+          }
+        },
+        {
+          "name": "Re-parent - own child, cycle (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Civil\",\n  \"parentId\": \"{{childDepartmentId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Moving a department under one of its own descendants would detach that whole branch from the tree:\n\n`400 { \"errors\": { \"parentId\": \"Cannot move a department under one of its own children\" } }`"
+          }
+        },
+        {
+          "name": "Delete department with children (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{departmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{departmentId}}"
+              ]
+            },
+            "description": "`409 { \"reason\": \"This department has sub-departments. Delete those first.\" }`\n\nA department with users assigned is refused the same way, and the message counts them."
+          }
+        },
+        {
+          "name": "Delete department",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/departments/{{childDepartmentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments",
+                "{{childDepartmentId}}"
+              ]
+            },
+            "description": "**204** once nothing hangs off it."
+          }
+        },
+        {
+          "name": "Create department as Viewer (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/departments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "departments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should Not Exist\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Viewer holds `department:read` but not `department:create`. Note it can still **list** departments — run the first request with this token to see that.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{viewerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "description": "Top level of the hierarchy. `code` is optional; `name` must be unique (case-insensitive).",
+      "item": [
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories?query=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Case-insensitive match against name and code"
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "disabled": true,
+                  "description": "Active | Inactive"
+                }
+              ]
+            },
+            "description": "Returns a flat array sorted by name. Both query params are optional — enable them to filter."
+          }
+        },
+        {
+          "name": "Create category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "  pm.collectionVariables.set('categoryId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electricals\",\n  \"code\": \"ELE\",\n  \"description\": \"Wiring, fittings and fixtures\",\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Only `name` is required. `code`, `description` and `status` are optional (`status` defaults to `Active`).\n\nSaves the new id into `{{categoryId}}`.\n\n**400** `{ \"errors\": { \"name\": \"Category name is required\" } }`"
+          }
+        },
+        {
+          "name": "Get category by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "**404** when the category does not exist."
+          }
+        },
+        {
+          "name": "List sub-categories of a category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}",
+                "subcategories"
+              ]
+            },
+            "description": "Convenience route — same result as `GET /subcategories?categoryId={{categoryId}}`."
+          }
+        },
+        {
+          "name": "Update category (full replace)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electricals\",\n  \"code\": \"ELE\",\n  \"description\": \"Updated description\",\n  \"status\": \"Inactive\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "PUT is a **full replace** — any field you leave out is reset to its default (`code`/`description` to null, `status` to `Active`).\n\n**404** when the category does not exist."
+          }
+        },
+        {
+          "name": "Delete category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "**204** on success, no body.\n\n**409** when the category is still in use:\n```json\n{ \"reason\": \"This category has sub-categories. Delete those first.\" }\n```\n```json\n{ \"reason\": \"This category has materials assigned. Move or delete those first.\" }\n```\n\n**404** when it does not exist."
+          }
+        },
+        {
+          "name": "Create category - duplicate name (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"steel & metals\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Names are compared case-insensitively, so this collides with the seeded \"Steel & Metals\".\n\nExpected: `400 { \"errors\": { \"name\": \"A category with this name already exists\" } }`"
+          }
+        },
+        {
+          "name": "Delete category in use (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "1"
+              ]
+            },
+            "description": "Seeded category 1 has sub-categories.\n\nExpected: `409 { \"reason\": \"This category has sub-categories. Delete those first.\" }`"
+          }
+        },
+        {
+          "name": "Create category as Material Manager (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should not be created\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "`material_manager` may **read** the tree so it can file materials, but not change it. Expected `403` with `requiredPermissions: \"category:create\"`.\n\nRun **Auth > Login as Material Manager** once first.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{materialToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete category as Viewer (403)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "`viewer` holds only the four `:read` permissions.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{viewerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sub-categories",
+      "description": "Nest inside a category **or inside another sub-category**, with no depth limit. Send `parentId` to nest, `categoryId` to sit at the top of a category. A name only has to be unique among its own siblings.",
+      "item": [
+        {
+          "name": "List sub-categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories?categoryId=&parentId=&rootOnly=&query=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Everything under this category, at any depth"
+                },
+                {
+                  "key": "parentId",
+                  "value": "2",
+                  "disabled": true,
+                  "description": "Direct children of this sub-category only"
+                },
+                {
+                  "key": "rootOnly",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "Only ones sitting directly under a category (parentId is null)"
+                },
+                {
+                  "key": "query",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Case-insensitive match against name and code"
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "disabled": true,
+                  "description": "Active | Inactive"
+                }
+              ]
+            },
+            "description": "Flat array sorted by tree path. Each row carries `parentId`, `parentName`, `categoryName`, `depth` and `path` — enough to render a tree directly, or to feed `buildTree()` on `parentId`.\n\nA seeded response looks like:\n\n```\nid=1 depth=1  Steel & Metals > Flats\nid=2 depth=1  Steel & Metals > Pipes\nid=3 depth=2  Steel & Metals > Pipes > Square Hollow Section\nid=4 depth=1  Cement & Aggregates > OPC\n```"
+          }
+        },
+        {
+          "name": "List children of a sub-category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/2/children",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "2",
+                "children"
+              ]
+            },
+            "description": "Direct children only, one level down. Same as `GET /subcategories?parentId=2`, but 404s when the sub-category itself does not exist.\n\nSeeded sub-category 2 is \"Pipes\", so this returns \"Square Hollow Section\"."
+          }
+        },
+        {
+          "name": "Create sub-category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "  pm.collectionVariables.set('subcategoryId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Angles\",\n  \"categoryId\": 1,\n  \"code\": \"STL-ANG\",\n  \"description\": null,\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "description": "Top-level sub-category: `categoryId` given, no `parentId`, so it sits directly under the category and comes back with `parentId: null`, `depth: 1`.\n\nSaves the new id into `{{subcategoryId}}`.\n\n**400** `{ \"errors\": { \"categoryId\": \"Selected parent category does not exist\" } }`"
+          }
+        },
+        {
+          "name": "Create nested sub-category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "  pm.collectionVariables.set('childId', body.id);",
+                  "}",
+                  "pm.test('category was derived from the parent', () =>",
+                  "  pm.expect(body.categoryId).to.eql(1));",
+                  "pm.test('nested two levels down', () =>",
+                  "  pm.expect(body.depth).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Round Pipes\",\n  \"parentId\": 2,\n  \"code\": \"STL-RND\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "description": "**Sub-category inside a sub-category.** `parentId: 2` is the seeded \"Pipes\", and `categoryId` is omitted — it gets derived from the parent.\n\nResponse:\n```json\n{\n  \"id\": 5,\n  \"categoryId\": 1,\n  \"parentId\": 2,\n  \"name\": \"Round Pipes\",\n  \"parentName\": \"Pipes\",\n  \"categoryName\": \"Steel & Metals\",\n  \"depth\": 2,\n  \"path\": [\"Steel & Metals\", \"Pipes\", \"Round Pipes\"]\n}\n```\n\nNesting has no depth limit — pass this record's id as `parentId` to go a level deeper again.\n\nSaves the new id into `{{childId}}`."
+          }
+        },
+        {
+          "name": "Get sub-category by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/{{subcategoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "{{subcategoryId}}"
+              ]
+            },
+            "description": "**404** when the sub-category does not exist."
+          }
+        },
+        {
+          "name": "Update sub-category (full replace)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Angles\",\n  \"categoryId\": 1,\n  \"code\": \"STL-ANG\",\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/{{subcategoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "{{subcategoryId}}"
+              ]
+            },
+            "description": "PUT is a **full replace** — omitting `parentId` moves the record back up to the top of its category.\n\nSet `parentId` here to **re-parent** an existing sub-category.\n\nMoving it to a different category is refused with **409** while it has children or materials, because those rows pin the old category on themselves."
+          }
+        },
+        {
+          "name": "Re-parent a sub-category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Angles\",\n  \"parentId\": 2,\n  \"code\": \"STL-ANG\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/{{subcategoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "{{subcategoryId}}"
+              ]
+            },
+            "description": "Takes the top-level \"Angles\" and nests it under \"Pipes\" (id 2). `depth` goes from 1 to 2 and `path` grows a segment.\n\nSend the same body without `parentId` to move it back to the top of its category."
+          }
+        },
+        {
+          "name": "Delete sub-category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/{{childId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "{{childId}}"
+              ]
+            },
+            "description": "**204** on success, no body.\n\n**409** when it still has anything under it:\n```json\n{ \"reason\": \"This sub-category has sub-categories. Delete those first.\" }\n```\n```json\n{ \"reason\": \"This sub-category has materials assigned. Move or delete those first.\" }\n```\n\n**404** when it does not exist.\n\nDeletion is never recursive — you empty the tree from the leaves up."
+          }
+        },
+        {
+          "name": "Create sub-category - bad parent category (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ghost\",\n  \"categoryId\": 999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "description": "Expected: `400 { \"errors\": { \"categoryId\": \"Selected parent category does not exist\" } }`"
+          }
+        },
+        {
+          "name": "Create sub-category - bad parent sub-category (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Orphan\",\n  \"parentId\": 999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "description": "Expected: `400 { \"errors\": { \"parentId\": \"Selected parent sub-category does not exist\" } }`"
+          }
+        },
+        {
+          "name": "Create sub-category - parent in another category (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cross Category\",\n  \"categoryId\": 2,\n  \"parentId\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "description": "Sub-category 2 (\"Pipes\") lives in category 1, but `categoryId: 2` was sent. A sub-category cannot straddle two categories.\n\nExpected: `400 { \"errors\": { \"parentId\": \"Parent sub-category belongs to a different category\" } }`\n\nOmit `categoryId` entirely and it would be derived from the parent instead."
+          }
+        },
+        {
+          "name": "Re-parent - own child, cycle (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Pipes\",\n  \"parentId\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "2"
+              ]
+            },
+            "description": "Tries to put \"Pipes\" (2) under \"Square Hollow Section\" (3), which is its own child — that would detach the branch into a loop.\n\nThe check walks the whole ancestor chain, so a grandchild or deeper is caught too.\n\nExpected: `400 { \"errors\": { \"parentId\": \"Cannot move a sub-category under one of its own children\" } }`"
+          }
+        },
+        {
+          "name": "Re-parent - itself (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Pipes\",\n  \"parentId\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "2"
+              ]
+            },
+            "description": "Expected: `400 { \"errors\": { \"parentId\": \"A sub-category cannot be its own parent\" } }`"
+          }
+        },
+        {
+          "name": "Delete sub-category with children (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories",
+                "2"
+              ]
+            },
+            "description": "Seeded \"Pipes\" has \"Square Hollow Section\" under it.\n\nExpected: `409 { \"reason\": \"This sub-category has sub-categories. Delete those first.\" }`"
+          }
+        },
+        {
+          "name": "Create sub-category as Material Manager (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/subcategories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "subcategories"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should not be created\",\n  \"categoryId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sub-categories belong to the same owner as categories: `admin` and `category_manager`. Expected `403`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{materialToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Materials",
+      "description": "Item master. `code` is required and unique (case-insensitive). `uom` must be one of the recognised units — see the description on \"Create material\".",
+      "item": [
+        {
+          "name": "List materials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/materials?query=&categoryId=&subcategoryId=&uom=&status=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "cement",
+                  "disabled": true,
+                  "description": "Case-insensitive match against name and code"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Filter to one category"
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Filter to one sub-category"
+                },
+                {
+                  "key": "uom",
+                  "value": "kg",
+                  "disabled": true,
+                  "description": "Filter by unit of measure"
+                },
+                {
+                  "key": "status",
+                  "value": "Active",
+                  "disabled": true,
+                  "description": "Active | Inactive"
+                }
+              ]
+            },
+            "description": "Returns a flat array sorted by code. Each row includes resolved `categoryName` and `subcategoryName` for display. All filters are optional and combine with AND."
+          }
+        },
+        {
+          "name": "Create material",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "  pm.collectionVariables.set('materialId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MAT-099-1-001\",\n  \"name\": \"MS Square Tube 40x40\",\n  \"categoryId\": 1,\n  \"subcategoryId\": 2,\n  \"uom\": \"kg\",\n  \"hsn\": \"7306\",\n  \"gst\": \"18%\",\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "description": "Required: `code`, `name`, `uom`, and at least one of `categoryId` / `subcategoryId`.\n\nOptional: `hsn` and `gst` default to `\"-\"`, `status` defaults to `Active`.\n\n**Recognised `uom` values:** nos, pcs, set, pair, kg, g, ton, quintal, m, cm, mm, ft, inch, sqm, sqft, cum, cft, ltr, ml, bag, box, bundle, roll, sheet, coil, pkt, drum, can. Matching is case-insensitive; anything else returns `\"Unrecognized unit of measure\"`.\n\nSaves the new id into `{{materialId}}`."
+          }
+        },
+        {
+          "name": "Create material (sub-category only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MAT-099-1-002\",\n  \"name\": \"SHS 40x40x2mm\",\n  \"subcategoryId\": 3,\n  \"uom\": \"kg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "description": "`categoryId` is omitted, so it is **derived** from the sub-category. The response comes back with `categoryId` filled in.\n\nSub-category 3 is \"Square Hollow Section\", which is itself nested under \"Pipes\" — materials can hang off a sub-category at **any depth**, not just top-level ones."
+          }
+        },
+        {
+          "name": "Create material (category only, no sub-category)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MAT-099-1-003\",\n  \"name\": \"Loose Item\",\n  \"categoryId\": 1,\n  \"uom\": \"nos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "description": "A material may sit directly under a category. `subcategoryId` comes back as `null`."
+          }
+        },
+        {
+          "name": "Get material by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/materials/{{materialId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "{{materialId}}"
+              ]
+            },
+            "description": "**404** when the material does not exist."
+          }
+        },
+        {
+          "name": "Update material (full replace)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MAT-099-1-001\",\n  \"name\": \"MS Square Tube 40x40 (revised)\",\n  \"categoryId\": 1,\n  \"subcategoryId\": 2,\n  \"uom\": \"kg\",\n  \"hsn\": \"7306\",\n  \"gst\": \"12%\",\n  \"status\": \"Active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials/{{materialId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "{{materialId}}"
+              ]
+            },
+            "description": "PUT is a **full replace** — omitted fields reset to their defaults.\n\nThe uniqueness check on `code` excludes this material itself, so re-sending its own code is fine.\n\n**404** when the material does not exist."
+          }
+        },
+        {
+          "name": "Toggle material status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns the flipped status', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.be.oneOf(['Active', 'Inactive']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/materials/{{materialId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "{{materialId}}",
+                "status"
+              ]
+            },
+            "description": "Empty body — the server flips Active <-> Inactive itself.\n\nReturns `{ \"id\": 3, \"status\": \"Inactive\" }`.\n\n**404** when the material does not exist."
+          }
+        },
+        {
+          "name": "Delete material",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/materials/{{materialId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "{{materialId}}"
+              ]
+            },
+            "description": "**204** on success, no body.\n\n**404** when the material does not exist."
+          }
+        },
+        {
+          "name": "Bulk import",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('always 200, even with partial failures', () =>",
+                  "  pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "console.log('added: ' + body.added.length +",
+                  "            ', failed: ' + body.failed.length);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": [\n    {\n      \"code\": \"BULK-001\",\n      \"name\": \"Bulk Item A\",\n      \"categoryId\": 1,\n      \"uom\": \"m\"\n    },\n    {\n      \"code\": \"BULK-002\",\n      \"name\": \"Bulk Item B\",\n      \"subcategoryId\": 3,\n      \"uom\": \"bag\",\n      \"hsn\": \"2523\",\n      \"gst\": \"28%\"\n    },\n    {\n      \"code\": \"BULK-003\",\n      \"name\": \"\",\n      \"categoryId\": 999,\n      \"uom\": \"bagg\"\n    },\n    {\n      \"code\": \"BULK-001\",\n      \"name\": \"Duplicate Of Row 1\",\n      \"categoryId\": 1,\n      \"uom\": \"kg\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials/bulk-import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "bulk-import"
+              ]
+            },
+            "description": "Validates each row independently and **always returns 200**, even when some rows fail. Max 5000 rows.\n\nThe sample body is deliberately mixed: rows 1 and 2 succeed, row 3 fails on three fields at once, row 4 collides with row 1 from the same batch.\n\n```json\n{\n  \"added\": [ { \"id\": 5, \"code\": \"BULK-001\", ... } ],\n  \"failed\": [\n    {\n      \"row\": { \"code\": \"BULK-003\", \"name\": \"\", ... },\n      \"errors\": {\n        \"name\": \"Material name is required\",\n        \"categoryId\": \"Selected category does not exist\",\n        \"uom\": \"Unrecognized unit of measure\"\n      }\n    }\n  ]\n}\n```"
+          }
+        },
+        {
+          "name": "Create material - combined errors (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"mat-001-1-001\",\n  \"name\": \"\",\n  \"categoryId\": 999,\n  \"uom\": \"bagg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "description": "Every problem is reported at once rather than one at a time. The code collides with the seeded `MAT-001-1-001` (compared case-insensitively).\n\nExpected:\n```json\n{\n  \"errors\": {\n    \"code\": \"This item code already exists\",\n    \"name\": \"Material name is required\",\n    \"categoryId\": \"Selected category does not exist\",\n    \"uom\": \"Unrecognized unit of measure\"\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Create material - mismatched pair (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"MAT-MISMATCH\",\n  \"name\": \"Wrong Pair\",\n  \"categoryId\": 2,\n  \"subcategoryId\": 1,\n  \"uom\": \"kg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "description": "Seeded sub-category 1 (\"Flats\") belongs to category 1, not category 2.\n\nExpected: `400 { \"errors\": { \"subcategoryId\": \"Selected sub-category does not belong to the selected category\" } }`"
+          }
+        },
+        {
+          "name": "Create material as Category Manager (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/materials",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should not be created\",\n  \"code\": \"NOPE-1\",\n  \"categoryId\": 1,\n  \"uom\": \"nos\",\n  \"hsn\": \"7308\",\n  \"gst\": \"18%\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The mirror image of the category case: `category_manager` can list materials but not add one. Expected `403` with `requiredPermissions: \"material:create\"`.\n\nRun **Auth > Login as Category Manager** once first.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{categoryToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bulk import as Viewer (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/materials/bulk-import",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materials",
+                "bulk-import"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": [\n    {\n      \"name\": \"Nope\",\n      \"categoryId\": 1,\n      \"uom\": \"nos\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Bulk import is a create, so it needs `material:create`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{viewerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Thundering herd (cache demo)",
+      "description": "**The problem.** A cached key expires or is invalidated. Every request that arrives before the first one finishes also sees a miss, so they *all* run the same query. 96 readers become 96 identical `SELECT`s — and it bites hardest exactly when traffic is highest.\n\n**Why this is a server-side endpoint and not a Postman Runner loop.** Postman runs requests *sequentially* — request 2 does not leave until request 1 returns, so the misses never overlap and no herd ever forms. The burst has to be fired from one place at once, which is what `POST /diagnostics/thundering-herd` does with `Promise.all`.\n\n**How to use this folder**\n\n1. **Auth > Login as Admin** — these routes need `material:create` + `material:delete`.\n2. Run **1. Reproduce**, note `database.listQueries`.\n3. Run **2. Fixed**, note it again.\n4. Open **4. Live dashboard** to see it on the graph.\n\n**What the fix is:** single-flight (request coalescing) in `RedisService.remember` — the first miss runs the loader, every other request waits on that same promise. One query, N readers served.\n\n---\n\n### Three ways to do this in Postman\n\n1. **Request \"0. Burst\"** — fires 100 concurrent calls from a pre-request script and reads the counters back. Self-contained, nothing to configure.\n2. **Runner > Performance** — Postman's built-in load testing. Pick the collection, set virtual users and a duration, and it drives real concurrent traffic while charting response times. Use it against `GET /materials`; the cache card on the dashboard shows the effect.\n3. **Requests \"1.\" and \"2.\"** — the server-side burst. Most precise, because the concurrency is created next to the cache instead of across a network, and it flips the fix per run without a restart.\n\n**What does *not* work:** Runner with 100 iterations. That is sequential — request 2 leaves only after request 1 returns, so the misses never overlap and the herd never forms. You would see 100 cache hits and conclude, wrongly, that there is no problem.",
+      "item": [
+        {
+          "name": "0. Burst 100 concurrent GETs (pure Postman)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Postman runs REQUESTS sequentially, but a script can still fire many",
+                  "// calls at once — pm.sendRequest is async, so kicking off 100 of them and",
+                  "// awaiting them together produces real concurrency inside one request.",
+                  "const N = Number(pm.collectionVariables.get(\"burstSize\") || 100);",
+                  "const base = pm.collectionVariables.get(\"baseUrl\");",
+                  "const token = pm.collectionVariables.get(\"token\");",
+                  "const auth = { Authorization: \"Bearer \" + token };",
+                  "",
+                  "const send = (method, path) => new Promise((resolve) => {",
+                  "  pm.sendRequest({ url: base + path, method: method, header: auth },",
+                  "    (err, res) => resolve(err ? 0 : res.code));",
+                  "});",
+                  "",
+                  "// 1. start from a known state: zero the counters and drop the cached list,",
+                  "//    so the burst lands on a cold key and every number belongs to this run",
+                  "await send(\"POST\", \"/diagnostics/cache/reset\");",
+                  "await send(\"POST\", \"/diagnostics/cache/invalidate\");",
+                  "",
+                  "// 2. the burst itself — all N leave before any of them come back",
+                  "const startedAt = Date.now();",
+                  "const codes = await Promise.all(",
+                  "  Array.from({ length: N }, () => send(\"GET\", \"/materials\")));",
+                  "",
+                  "pm.collectionVariables.set(\"burstMs\", Date.now() - startedAt);",
+                  "pm.collectionVariables.set(\"burstOk\", codes.filter((c) => c === 200).length);",
+                  "console.log(\"fired \" + N + \" concurrent GET /materials in \" +",
+                  "  pm.collectionVariables.get(\"burstMs\") + \"ms\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"counters returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const row = (b.byKey || []).find((k) => k.key.indexOf(\"list:materials\") === 0) || {};",
+                  "const n = Number(pm.collectionVariables.get(\"burstSize\") || 100);",
+                  "",
+                  "console.log(\"--------------------------------------------\");",
+                  "console.log(\"requests sent      : \" + n);",
+                  "console.log(\"completed 200      : \" + pm.collectionVariables.get(\"burstOk\"));",
+                  "console.log(\"client wall clock  : \" + pm.collectionVariables.get(\"burstMs\") + \"ms\");",
+                  "console.log(\"DB loads           : \" + (row.loads || 0));",
+                  "console.log(\"coalesced (saved)  : \" + (row.coalesced || 0));",
+                  "console.log(\"served from Redis  : \" + (row.hits || 0));",
+                  "console.log(\"--------------------------------------------\");",
+                  "",
+                  "pm.test(\"the whole burst reached the server\", () =>",
+                  "  pm.expect((row.reads || 0)).to.be.at.least(n * 0.9));",
+                  "",
+                  "// With CACHE_SINGLEFLIGHT=true this is 1. Restart the API with",
+                  "// CACHE_SINGLEFLIGHT=false and it jumps to ~N — that is the herd.",
+                  "pm.test(\"single-flight collapsed the herd\", () =>",
+                  "  pm.expect(row.loads || 0).to.be.below(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/cache",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "cache"
+              ]
+            },
+            "description": "Everything happens inside **this one Postman request**, no Runner needed.\n\n**How it manages to be concurrent.** Postman runs *requests* one after another, but a script can fire many calls at once: `pm.sendRequest` is async, so starting 100 of them and awaiting them together means all 100 leave before any come back. That is genuine concurrency, from one process — the same shape that reproduces the herd.\n\n**What the pre-request script does**\n\n1. `POST /diagnostics/cache/reset` — zero the counters\n2. `POST /diagnostics/cache/invalidate` — drop the cached list so the burst hits a cold key\n3. fires `{{burstSize}}` concurrent `GET /materials`\n\nThe request itself then reads the counters back, so the **response is the proof**: `loads` is how many queries PostgreSQL actually saw.\n\n**To see the problem instead of the fix**, restart the API with\n`CACHE_SINGLEFLIGHT=false` and run this again — `loads` goes from 1 to roughly 100.\n\nMeasured here on 100 real HTTP requests:\n\n| | DB loads | Wall clock | Completed |\n| --- | --: | --: | --: |\n| `CACHE_SINGLEFLIGHT=false` | 98 | 1098ms | 98 / 100 |\n| `CACHE_SINGLEFLIGHT=true` | 1 | 97ms | 100 / 100 |\n\nNote two requests did not even complete without the fix — the pool was saturated.\n\nChange `{{burstSize}}` to try other numbers. Postman scripts have a time budget, so keep it in the hundreds."
+          }
+        },
+        {
+          "name": "1. Reproduce the herd (singleFlight = false)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/thundering-herd",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "thundering-herd"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reads\": 96,\n  \"writes\": 3,\n  \"singleFlight\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Fires 96 concurrent reads with 3 writes spread through them. Each write invalidates the cached list, so the readers pile onto a cold key.\n\nExpect `database.listQueries` around **96** — one per reader. That is the herd: the cache absorbed nothing and PostgreSQL took the whole burst.\n\nWatch `cache.avgLoadMs` too — it climbs, because the queries are competing with each other for pool connections."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log('WITHOUT fix -> ' + b.database.listQueries + ' db queries in ' + b.durationMs + 'ms');",
+                  "pm.collectionVariables.set('herdBefore', b.database.listQueries);",
+                  "pm.collectionVariables.set('herdBeforeMs', b.durationMs);",
+                  "pm.test('the herd happened: roughly one query per reader', () => pm.expect(b.database.listQueries).to.be.above(50));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Fixed (singleFlight = true)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/thundering-herd",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "thundering-herd"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reads\": 96,\n  \"writes\": 3,\n  \"singleFlight\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The same burst with coalescing on. The first miss runs the query; the other 95 wait on it.\n\nExpect `database.listQueries` = **1** and `database.queriesAvoided` = 95. The duration falls with it, because the database is no longer serving 96 copies of one statement.\n\nThe test script prints both runs side by side in the Postman console."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "const before = Number(pm.collectionVariables.get('herdBefore') || 0);",
+                  "const beforeMs = Number(pm.collectionVariables.get('herdBeforeMs') || 0);",
+                  "console.log('WITH fix    -> ' + b.database.listQueries + ' db queries in ' + b.durationMs + 'ms');",
+                  "if (before) {",
+                  "  console.log('queries: ' + before + ' -> ' + b.database.listQueries + ' (' + Math.round(before / Math.max(1, b.database.listQueries)) + 'x fewer)');",
+                  "  console.log('time:    ' + beforeMs + 'ms -> ' + b.durationMs + 'ms');",
+                  "}",
+                  "pm.test('collapsed to a single query', () => pm.expect(b.database.listQueries).to.be.below(5));",
+                  "pm.test('the rest were coalesced', () => pm.expect(b.database.queriesAvoided).to.be.above(50));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Cache counters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/cache",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "cache"
+              ]
+            },
+            "description": "The raw counters, per key group.\n\n- `loads` — times the loader ran, i.e. queries PostgreSQL saw\n- `coalesced` — misses that waited on an in-flight load\n- `hits` — served straight from Redis\n- `invalidations` — keys dropped by a write\n\n`auth:user:*` and `list:materials:*` are grouped, so one row covers every user and every filter combination."
+          }
+        },
+        {
+          "name": "4. Live dashboard (open in a browser)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{fileBaseUrl}}/api/metrics/dashboard",
+              "host": [
+                "{{fileBaseUrl}}/api/metrics/dashboard"
+              ]
+            },
+            "description": "Open this URL in a browser, not in Postman — it is an HTML page that streams over websockets.\n\nThe **Cache** card shows the four numbers as a bar chart plus a per-key table. Run request 1 and watch \"DB loads\" spike; run request 2 and watch \"Queries avoided\" take over instead.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "5. Reset the counters",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/cache/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "cache",
+                "reset"
+              ]
+            },
+            "description": "Zeroes the cache counters so the next run starts clean."
+          }
+        },
+        {
+          "name": "Bigger burst (500 readers)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/thundering-herd",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "thundering-herd"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reads\": 500,\n  \"writes\": 5,\n  \"singleFlight\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The gap widens with scale: 500 readers still produce a handful of queries. Flip `singleFlight` to false to see 500 instead.\n\n`reads` is capped at 1000 and `writes` at 50."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "description": "The only routes outside RBAC. `dashboard.html` is opened straight in a browser tab and polls these with plain `fetch`, so there is nowhere to attach a bearer token. They expose request counts, not business data.",
+      "item": [
+        {
+          "name": "Get metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns a snapshot', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json();",
+                  "console.log('requests: ' + m.totals.requests +",
+                  "            ', success: ' + m.totals.success +",
+                  "            ', failed: ' + m.totals.failed +",
+                  "            ', rpm: ' + m.load.requestsPerMinute);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "One snapshot of everything the server has seen since it started (or since the last reset).\n\n**totals** — `requests`, `success`, `failed`, split into `clientErrors` (4xx) and `serverErrors` (5xx), plus `successRate` / `failureRate` as percentages.\n\n**load** — `inFlight` (requests being served right now), `peakInFlight`, `requestsPerMinute` (rolling 60-second window), `peakRequestsPerMinute`, and lifetime averages per minute and per second.\n\n**latencyMs** — `average`, `min`, `max`, `p50`, `p95`, `p99`. Percentiles come from the last 1000 requests.\n\n**byStatus** — a count per HTTP status code: `{ \"200\": 13, \"400\": 2, \"404\": 2 }`.\n\n**byMethod** — a count per verb.\n\n**byEndpoint** — per-route breakdown sorted by traffic, each with `hits`, `success`, `failed`, `successRate`, `avgMs`, `minMs`, `maxMs`, `lastStatus`. Numeric ids are collapsed, so `/materials/1` and `/materials/2` are counted together as `GET /api/materials/:id`.\n\n**recentFailures** — the last 20 failures with the actual reason pulled out of the response body, whatever shape it used:\n```\n409  DELETE /api/categories/:id  -> This category has sub-categories. Delete those first.\n400  POST /api/materials        -> uom: Unrecognized unit of measure; name: Material name is required\n404  GET /api/does-not-exist     -> Cannot GET /api/does-not-exist\n```\n\n**slowestRequests** — the 10 slowest calls seen, with timestamps.\n\n**process** — `pid`, node version, `heapUsedMb`, `rssMb`.\n\nAlso `uptime` (seconds + human readable) and `since` (when counting started).",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Live dashboard (open in a browser)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/metrics/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics",
+                "dashboard"
+              ]
+            },
+            "description": "Returns the dashboard HTML. Postman will show the raw markup — **open this URL in a browser instead**, e.g. http://localhost:3000/api/metrics/dashboard\n\nThe page connects over socket.io and updates the moment any API is hit, so it never needs refreshing. It shows:\n\n- KPI tiles — total, successful, failed, requests/min, in-flight, average latency\n- A live requests-per-second area chart over a rolling 60-second window, with hover crosshair and a table view\n- Response counts by status class, and latency percentiles (p50 / p95 / p99)\n- A per-endpoint table sorted by traffic\n- The last 20 failures with their actual error message\n\nLight and dark themes, plus a Reset button wired to `POST /metrics/reset`.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Reset metrics",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/metrics/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics",
+                "reset"
+              ]
+            },
+            "description": "Clears every counter and restarts the uptime clock. Useful before a load test so the numbers only cover that run.\n\nReturns `{ message, since }`.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": []
+        },
+        "description": "Root route — returns the app's hello string. Handy for confirming the server is up and the `/api` prefix is applied.",
+        "auth": {
+          "type": "noauth"
+        }
+      }
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
+}
