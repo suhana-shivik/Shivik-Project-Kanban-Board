@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: DEPLOYMENT_NAME_PLACEHOLDER
+  namespace: easy-kanban
+  labels:
+    app: easy-kanban
+    component: frontend
+spec:
+  replicas: 0  # Matches Terraform eks-multi-tenant-deployment.tf easy_kanban_shared
+  selector:
+    matchLabels:
+      app: easy-kanban
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: easy-kanban
+        component: frontend
+    spec:
+      containers:
+      - name: easy-kanban
+        image: IMAGE_NAME_PLACEHOLDER
+        imagePullPolicy: IfNotPresent  # Use local image if available
+        ports:
+        - containerPort: 3010
+          name: frontend
+        - containerPort: 3222
+          name: backend
+        envFrom:
+        - configMapRef:
+            name: easy-kanban-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: 3222
+            httpHeaders:
+            - name: Host
+              value: app.ezkan.cloud
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30  # Allow up to 300s for startup (after init containers)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3222
+            httpHeaders:
+            - name: Host
+              value: app.ezkan.cloud
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3222
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
+        volumeMounts:
+        - name: app-data
+          mountPath: /app/server/data
+        - name: app-attachments
+          mountPath: /app/server/attachments
+        - name: app-avatars
+          mountPath: /app/server/avatars
+      volumes:
+      - name: app-data
+        persistentVolumeClaim:
+          claimName: easy-kanban-shared-pvc-data
+      - name: app-attachments
+        persistentVolumeClaim:
+          claimName: easy-kanban-shared-pvc-attachments
+      - name: app-avatars
+        persistentVolumeClaim:
+          claimName: easy-kanban-shared-pvc-avatars
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node.kubernetes.io/disk-pressure
+        operator: Exists
+        effect: NoSchedule
+      restartPolicy: Always

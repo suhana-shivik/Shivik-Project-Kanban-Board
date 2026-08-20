@@ -1,0 +1,620 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Admin numeric fields: type freely, no spinner arrows */
+.admin-numeric-input {
+  -moz-appearance: textfield;
+}
+.admin-numeric-input::-webkit-outer-spin-button,
+.admin-numeric-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/*
+ * Page shell: keep ~20% side gutters on wide screens (80vw content).
+ * As the viewport shrinks, widen toward 100% so margins hit 0 before
+ * inner controls wrap/compress. Paired gutter padding also collapses to 0.
+ */
+:root {
+  --app-page-min-width: 75rem; /* ~1200px preferred content floor */
+}
+
+.app-page-shell {
+  /* width:100% avoids min(100%, 75rem) preferring 75rem and causing horizontal scroll on narrow viewports */
+  width: 100%;
+  max-width: min(100%, max(80vw, var(--app-page-min-width)));
+  box-sizing: border-box;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-page-inline-gutter {
+  padding-left: max(0.75rem, min(1.5rem, calc((100vw - var(--app-page-min-width)) / 2)));
+  padding-right: max(0.75rem, min(1.5rem, calc((100vw - var(--app-page-min-width)) / 2)));
+}
+
+/*
+ * The column bulk menu sits just left of the column (half its width hangs out).
+ * The board scroller would clip that overhang on the first column, so borrow as
+ * much of the page gutter as we can and pad the rest. Columns stay aligned with
+ * the header on typical widths; the menu still scrolls away with the column.
+ */
+[data-kanban-scroll="board"],
+[data-kanban-scroll="trash"] {
+  --kanban-bulk-fab-overhang: 1.5rem;
+  --kanban-inline-gutter: max(
+    0.75rem,
+    min(1.5rem, calc((100vw - var(--app-page-min-width)) / 2))
+  );
+  --kanban-bulk-fab-borrow: min(
+    var(--kanban-inline-gutter),
+    var(--kanban-bulk-fab-overhang)
+  );
+  margin-left: calc(-1 * var(--kanban-bulk-fab-borrow));
+  padding-left: var(--kanban-bulk-fab-overhang);
+  width: calc(100% + var(--kanban-bulk-fab-borrow));
+  box-sizing: border-box;
+}
+
+/* Prevent flash of light content in dark mode */
+@layer base {
+  html.dark {
+    color-scheme: dark;
+  }
+  
+  /* Ensure task cards render with correct background immediately to prevent flash */
+  /* Only apply to default task cards (not selected, not system, not special states) */
+  .task-card:not(.bg-gray-100):not(.bg-yellow-50):not(.bg-blue-50):not(.bg-blue-100):not(.bg-green-50):not(.bg-purple-50):not(.bg-yellow-50):not(.bg-gray-700):not(.bg-yellow-900):not(.bg-blue-900):not(.bg-green-900):not(.bg-purple-900) {
+    background-color: var(--task-card-bg) !important;
+  }
+  
+  /* Prevent column background flash - use CSS variable for default state */
+  .column-container {
+    background-color: var(--column-bg) !important;
+  }
+  
+  /* Allow hover states to work */
+  .column-container:hover {
+    background-color: var(--column-hover-bg) !important;
+  }
+  
+}
+
+/* Keep Admin / Reports tab strips horizontally scrollable during Joyride.
+   Joyride's scroll-parent fix can set overflow:visible on ancestors, which
+   expands every tab into view and looks broken. */
+[data-tour-id="admin-tabs"] nav,
+[data-tour-id="reports-tabs"] > div {
+  overflow-x: auto !important;
+  max-width: 100%;
+}
+
+/* Prevent scrollable container flash - apply outside @layer for higher priority */
+/* This ensures the background is applied immediately, even during React re-renders */
+/* Use direct colors for light mode, CSS variable for dark mode to prevent flash */
+div[data-tour-id="kanban-columns"],
+.kanban-scrollable-container,
+.overflow-x-auto.w-full,
+.board-drop-area,
+.main-layout-container,
+.kanban-columns-container {
+  /* Light mode default */
+  background-color: rgb(249, 250, 251) !important; /* gray-50 */
+  /* Hint browser to optimize for background changes */
+  will-change: background-color;
+}
+
+/*
+ * contain:paint makes a containing block for position:fixed, which would pin
+ * kanban column titles to the board scroller instead of the viewport.
+ * Keep paint containment on other overflow-x-auto surfaces (e.g. list body).
+ */
+.overflow-x-auto.w-full:not(.kanban-scrollable-container):not([data-tour-id="kanban-columns"]) {
+  contain: paint;
+}
+
+/* Dark mode override */
+.dark div[data-tour-id="kanban-columns"],
+.dark .kanban-scrollable-container,
+.dark .overflow-x-auto.w-full,
+.dark .board-drop-area,
+.dark .main-layout-container,
+.dark .kanban-columns-container {
+  background-color: rgb(17, 24, 39) !important; /* gray-900 */
+}
+
+/* Also ensure body/html have correct background to prevent any flash */
+html {
+  background-color: var(--main-bg) !important;
+}
+
+body {
+  background-color: var(--main-bg) !important;
+}
+
+/* CSS Variables for Recharts Tooltips */
+:root {
+  --tooltip-bg: #111827; /* gray-900 — inverted chrome */
+  --tooltip-border: rgba(255, 255, 255, 0.1);
+  --tooltip-text: #ffffff;
+  --scrollbar-thumb: rgb(203, 213, 225); /* gray-300 */
+  --scrollbar-track: rgb(241, 245, 249); /* gray-100 */
+  --task-card-bg: rgb(255, 255, 255); /* white */
+  --column-bg: rgb(249, 250, 251); /* gray-50 */
+  --column-hover-bg: rgb(243, 244, 246); /* gray-100 */
+  --page-bg: rgb(249, 250, 251); /* gray-50 */
+  --main-bg: rgb(243, 244, 246); /* gray-100 */
+}
+
+.dark {
+  --tooltip-bg: #f3f4f6; /* gray-100 — inverted chrome */
+  --tooltip-border: rgba(0, 0, 0, 0.1);
+  --tooltip-text: #111827;
+  --scrollbar-thumb: rgb(55, 65, 81); /* gray-700 - darker to blend better */
+  --scrollbar-track: rgb(17, 24, 39); /* gray-900 - matches main background */
+  --task-card-bg: rgb(31, 41, 55); /* gray-800 - matches dark mode */
+  --column-bg: rgb(31, 41, 55); /* gray-800 */
+  --column-hover-bg: rgb(55, 65, 81); /* gray-700 */
+  --page-bg: rgb(17, 24, 39); /* gray-900 */
+  --main-bg: rgb(17, 24, 39); /* gray-900 */
+}
+
+/* Disable drag-and-drop when comment tooltip is active (JS version) */
+.comment-tooltip-active [data-dnd-kit-draggable-handle],
+.comment-tooltip-active [data-sortable-handle],
+.comment-tooltip-active .sortable-item {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* Keep tooltip interactive */
+.comment-tooltip-active .comment-tooltip {
+  pointer-events: auto !important;
+}
+
+/* Hide scrollbars for navigation containers */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer and Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, and Opera */
+}
+
+/* TipTap Editor List Styles - Fix for bullet and numbering issues */
+.ProseMirror ul {
+  list-style-type: disc !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.ProseMirror li {
+  display: list-item !important;
+  margin-left: 0 !important;
+  padding-left: 0.25rem !important;
+}
+
+.ProseMirror ul ul {
+  list-style-type: circle !important;
+  margin-left: 1.5rem !important;
+}
+
+.ProseMirror ul ul ul {
+  list-style-type: square !important;
+  margin-left: 1.5rem !important;
+}
+
+/* Ensure list items have proper spacing */
+.ProseMirror li p {
+  margin: 0 !important;
+}
+
+.ProseMirror li + li {
+  margin-top: 0.25rem !important;
+}
+
+/* Also apply list styles to rendered comments (prose class) */
+.prose ul {
+  list-style-type: disc !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.prose ol {
+  list-style-type: decimal !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.prose li {
+  display: list-item !important;
+  margin-left: 0 !important;
+  padding-left: 0.25rem !important;
+}
+
+.prose ul ul {
+  list-style-type: circle !important;
+  margin-left: 1.5rem !important;
+}
+
+.prose ul ul ul {
+  list-style-type: square !important;
+  margin-left: 1.5rem !important;
+}
+
+.prose li p {
+  margin: 0 !important;
+}
+
+.prose li + li {
+  margin-top: 0.25rem !important;
+}
+
+/* Agent / Markdown comment formatting (fenced code, headings) */
+.comment-md pre {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: rgb(243 244 246);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: pre;
+}
+.dark .comment-md pre {
+  background: rgb(31 41 55);
+}
+.comment-tooltip .comment-md pre {
+  background: rgb(55 65 81);
+}
+.dark .comment-tooltip .comment-md pre {
+  background: rgb(229 231 235);
+  color: rgb(17 24 39);
+}
+.comment-md code {
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.comment-md :not(pre) > code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  background: rgb(243 244 246);
+}
+.dark .comment-md :not(pre) > code {
+  background: rgb(55 65 81);
+}
+.comment-md p {
+  margin: 0.35rem 0;
+}
+.comment-md h1,
+.comment-md h2,
+.comment-md h3 {
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+}
+.comment-md h1 { font-size: 1.1em; }
+.comment-md h2 { font-size: 1.05em; }
+.comment-md h3 { font-size: 1em; }
+.comment-md ul {
+  list-style-type: disc;
+  margin-left: 1.25rem;
+}
+.comment-md ol {
+  list-style-type: decimal;
+  margin-left: 1.25rem;
+}
+
+/* TipTap specific list classes */
+.tiptap-bullet-list {
+  list-style-type: disc !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.tiptap-ordered-list {
+  list-style-type: decimal !important;
+  margin-left: 1.5rem !important;
+  padding-left: 0 !important;
+}
+
+.tiptap-list-item {
+  display: list-item !important;
+  margin-left: 0 !important;
+  padding-left: 0.25rem !important;
+}
+
+/* TaskCard Title - Handle text wrapping */
+.task-card h3 {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* TaskCard Description Styles - Handle text wrapping and images */
+.task-card-description {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.task-card-description * {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.task-card-description img {
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 120px !important;
+  border-radius: 4px !important;
+  object-fit: cover !important;
+  margin: 0.5rem 0 !important;
+  display: block !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/*
+ * Shrink / Preview mode: line-clamp alone does not clip HTML tables (table layout
+ * ignores -webkit-line-clamp). Hard max-height keeps cards consistent.
+ */
+.task-card-description.line-clamp-2,
+.task-description-shrink {
+  max-height: 2.75rem; /* ~2 lines of text-sm */
+  overflow: hidden !important;
+}
+
+/* Ensure images in shrunken task cards don't break layout */
+.task-card-description.line-clamp-2 img,
+.task-description-shrink img {
+  max-height: 60px !important;
+  margin: 0.25rem 0 !important;
+}
+
+/* Tables: force clip inside shrink preview (display:table escapes line-clamp) */
+.task-card-description.line-clamp-2 table,
+.task-description-shrink table {
+  display: block;
+  max-height: 2.5rem;
+  overflow: hidden;
+}
+
+/* Shrink-mode hover preview: keep card HTML structure inside a card-width bubble */
+.chrome-tooltip-html-preview {
+  max-height: 12rem;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.chrome-tooltip-html-preview p {
+  margin: 0.2em 0;
+}
+
+.chrome-tooltip-html-preview p:first-child {
+  margin-top: 0;
+}
+
+.chrome-tooltip-html-preview p:last-child {
+  margin-bottom: 0;
+}
+
+.chrome-tooltip-html-preview ul,
+.chrome-tooltip-html-preview ol {
+  margin: 0.2em 0;
+  padding-left: 1.25em;
+}
+
+.chrome-tooltip-html-preview li {
+  margin: 0;
+}
+
+.chrome-tooltip-html-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.25em 0;
+}
+
+.chrome-tooltip-html-preview th,
+.chrome-tooltip-html-preview td {
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  padding: 0.15em 0.35em;
+  vertical-align: top;
+}
+
+.chrome-tooltip-html-preview img {
+  max-width: 100%;
+  max-height: 48px;
+  height: auto;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
+  margin: 0.25em 0;
+}
+
+/* Compact image mode for inline editing in TaskCards */
+.ProseMirror .tiptap-image[data-compact="true"],
+.prose .tiptap-image[data-compact="true"] {
+  max-width: 150px !important;
+  max-height: 80px !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+  margin: 0.25rem 0 !important;
+}
+
+/* TaskDetails word-wrap handling for long unbroken text */
+[data-task-details] .ProseMirror,
+[data-task-details] .prose,
+[data-task-details] p,
+[data-task-details] div {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Brief highlight when jumping from Admin settings search.
+   Inset ring so overflow-hidden table/card parents don't clip L/R edges. */
+.admin-setting-search-highlight {
+  outline: 2px solid rgb(59 130 246);
+  outline-offset: -2px;
+  border-radius: 0.375rem;
+  background-color: rgba(59, 130, 246, 0.1);
+  transition: outline-color 0.3s ease, background-color 0.3s ease;
+}
+
+.dark .admin-setting-search-highlight {
+  background-color: rgba(59, 130, 246, 0.18);
+}
+
+/* Owner Configuration guide — all related fields for Guide me */
+.owner-setup-field-highlight {
+  outline: 2px solid rgb(245 158 11);
+  outline-offset: 4px;
+  border-radius: 0.375rem;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+  animation: owner-setup-field-pulse 1.6s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes owner-setup-field-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.28);
+  }
+}
+
+/* Meet the team modal */
+@keyframes meet-team-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes meet-team-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.meet-team-backdrop {
+  animation: meet-team-backdrop-in 180ms ease-out;
+}
+
+.meet-team-dialog {
+  animation: meet-team-dialog-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.meet-team-card {
+  /* Layout-only: never animate transform (conflicts with grid + dnd-kit) */
+  transition: box-shadow 180ms ease;
+}
+
+.meet-team-card--dragging {
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meet-team-backdrop,
+  .meet-team-dialog {
+    animation: none;
+  }
+}
+
+/* Demo login guided CTA (Fill form → Sign in) */
+@keyframes demo-guide-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(37, 99, 235, 0.55),
+      0 1px 2px rgba(15, 23, 42, 0.08);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px rgba(37, 99, 235, 0),
+      0 1px 2px rgba(15, 23, 42, 0.08);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes demo-guide-cue-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(5px);
+    opacity: 0.85;
+  }
+}
+
+@keyframes demo-guide-fields-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.demo-guide-target {
+  animation: demo-guide-pulse 1.35s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+.demo-guide-cue {
+  animation: demo-guide-cue-bounce 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.demo-guide-fields-flash {
+  animation: demo-guide-fields-flash 0.85s ease-out;
+}
+
+/*
+ * Ctrl/Cmd = card multi-select, Shift = range select. Disable card chrome so
+ * archive/copy cannot steal the click. Delete and link stay clickable on Shift.
+ */
+body.kanban-mod-ctrl .task-card button:not([data-kanban-mod-allow~="ctrl"]),
+body.kanban-mod-ctrl .task-card a {
+  pointer-events: none !important;
+}
+body.kanban-mod-shift .task-card button:not([data-kanban-mod-allow~="shift"]),
+body.kanban-mod-shift .task-card a {
+  pointer-events: none !important;
+}
+body.kanban-mod-ctrl .task-card,
+body.kanban-mod-shift .task-card {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-guide-target,
+  .demo-guide-cue,
+  .demo-guide-fields-flash {
+    animation: none;
+  }
+}

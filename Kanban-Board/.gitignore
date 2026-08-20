@@ -1,0 +1,149 @@
+# Running docker-compose.yml file.
+docker-compose.yml*
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Demo deploy marker (web01)
+.deploy-sha
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.k8s*
+.env.*.backup
+.env.customer-secrets
+.env.customer*
+
+# Live k8s manifests with secrets — use *.yaml.example in git; copy locally to fill values
+k8s/configmap-pg.yaml
+k8s/configmap.yaml
+k8s/postgres-secret-pg.yaml
+k8s/runner-secret-pg.yaml
+k8s/settings-crypto-secret-pg.yaml
+k8s/managed-s3-secret-pg.yaml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+server/kanban.db
+
+# Database backups
+backups/
+kanban-backup*.db
+
+# File uploads and attachments
+server/attachments/
+server/avatars/
+
+# Optional local demo profile photos (keep folder + README; do not commit images)
+server/demo-assets/avatars/*
+!server/demo-assets/avatars/.gitkeep
+!server/demo-assets/avatars/README.md
+
+# Logs
+logs/
+*.log
+
+# QA / Playwright suite (local only; not tracked)
+qa/
+
+# Local audit / assessment reports (not tracked)
+audit/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test files
+test-xss-fix.html
+QA_Test_Plan.csv
+
+# Generated version file (created at Docker build time)
+server/version.json
+
+# Workspace
+*.code-workspace

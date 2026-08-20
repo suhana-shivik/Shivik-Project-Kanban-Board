@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: easy-kanban-ingress
+  namespace: easy-kanban
+  labels:
+    app: easy-kanban
+  annotations:
+    # External: DNS for spec.rules[].host must point to this Ingress controller's LB IP.
+    # Do not put another proxy in front that overwrites Host unless it sets X-Forwarded-Host to the browser hostname.
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Preserve the original Host header so tenant routing can extract tenant ID
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: easy-kanban.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: easy-kanban-service
+            port:
+              number: 80
+  # TLS configuration for production domain
+  tls:
+  - hosts:
+    - easy-kanban.local
+    secretName: easy-kanban-tls

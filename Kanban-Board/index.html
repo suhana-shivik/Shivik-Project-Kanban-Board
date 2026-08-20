@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/agila-favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shivik Kanban Board</title>
+    <style>
+      /* Set CSS variables immediately to prevent flash - before React loads */
+      :root {
+        --page-bg: rgb(249, 250, 251); /* gray-50 */
+        --main-bg: rgb(243, 244, 246); /* gray-100 */
+      }
+      html.dark {
+        --page-bg: rgb(17, 24, 39); /* gray-900 */
+        --main-bg: rgb(17, 24, 39); /* gray-900 */
+      }
+      /* Apply background immediately to prevent flash */
+      html {
+        background-color: var(--main-bg);
+      }
+      body {
+        background-color: var(--main-bg);
+      }
+      /* Apply to all containers that might flash - set immediately */
+      /* Use direct colors instead of CSS variables to prevent flash */
+      .overflow-x-auto.w-full,
+      div[data-tour-id="kanban-columns"],
+      .board-drop-area,
+      .main-layout-container,
+      .kanban-columns-container {
+        background-color: rgb(249, 250, 251) !important; /* gray-50 - light mode */
+      }
+      
+      /* Dark mode override */
+      html.dark .overflow-x-auto.w-full,
+      html.dark div[data-tour-id="kanban-columns"],
+      html.dark .board-drop-area,
+      html.dark .main-layout-container,
+      html.dark .kanban-columns-container {
+        background-color: rgb(17, 24, 39) !important; /* gray-900 - dark mode */
+      }
+    </style>
+    <script>
+      // Apply dark mode class immediately if needed (before React loads)
+      (function() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const shouldBeDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+        if (shouldBeDark) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Store original URL immediately when page starts loading (before any redirects)
+      (function() {
+        const fullUrl = window.location.href;
+        if (fullUrl.includes('/project/') && fullUrl.includes('#')) {
+          console.log('🎯 Pre-redirect - storing original URL:', fullUrl);
+          sessionStorage.setItem('originalIntendedUrl', fullUrl);
+        }
+      })();
+    </script>
+    <script>
+      // Capture intended destination immediately when page loads, before any other scripts
+      (function() {
+        const currentHash = window.location.hash;
+        const currentPathname = window.location.pathname;
+        const referrer = document.referrer;
+        
+        
+        // Check if we were redirected from a /project/ URL (which would be the intended destination)
+        if (referrer && referrer.includes('/project/') && currentHash === '#login' && currentPathname === '/') {
+          try {
+            const referrerUrl = new URL(referrer);
+            let intendedDestination = referrerUrl.pathname;
+            
+            // Hash is lost during HTTP redirect, so check if we have it stored from before the redirect
+            const storedFullUrl = sessionStorage.getItem('originalIntendedUrl');
+            if (storedFullUrl) {
+              try {
+                const storedUrl = new URL(storedFullUrl);
+                intendedDestination = storedUrl.pathname + storedUrl.hash;
+                sessionStorage.removeItem('originalIntendedUrl'); // Clean up
+              } catch (e) {
+                // Fallback to referrer path only
+              }
+            }
+            localStorage.setItem('capturedIntendedDestination', intendedDestination);
+          } catch (e) {
+            // Failed to parse referrer URL
+          }
+        } else if (currentHash === '#login' && currentPathname === '/' && !referrer.includes('/project/')) {
+          // Clear stale data only when visiting login page directly (not from a /project/ redirect)
+          localStorage.removeItem('capturedIntendedDestination');
+          sessionStorage.removeItem('originalIntendedUrl');
+        }
+        
+        // Also capture from current URL if it's a protected page
+        if (currentHash && currentHash !== '' && currentHash !== '#') {
+          const route = currentHash.replace('#', '');
+          const publicPages = ['login', 'forgot-password', 'reset-password', 'reset-success', 'activate-account'];
+          const isPublicPage = publicPages.some(page => route.startsWith(page));
+          
+          if (!isPublicPage) {
+            const fullPath = currentPathname + currentHash;
+            const intendedUrl = fullPath === '/' ? currentHash : fullPath;
+            localStorage.setItem('capturedIntendedDestination', intendedUrl);
+          }
+        }
+        
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
