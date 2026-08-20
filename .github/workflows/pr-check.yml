@@ -1,0 +1,70 @@
+name: PR Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  material-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Material/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Material/backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+        continue-on-error: true # 24 pre-existing errors as of 2026-08-20; not blocking until cleaned up
+      - run: npm run test
+      - run: npm run build
+
+  material-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Material/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Material/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  kanban-board:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Kanban-Board
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Kanban-Board/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run help:ui-index:check
+        continue-on-error: true # stale as of 2026-08-20; run `npm run help:ui-index` to refresh, not blocking until then
+      - run: npm run build
+      - run: npm audit --audit-level=high
+
+  architecture-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run depcheck

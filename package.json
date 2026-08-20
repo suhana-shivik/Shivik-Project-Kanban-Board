@@ -1,0 +1,25 @@
+{
+  "name": "material-kanban",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky",
+    "depcheck": "depcruise --config .dependency-cruiser.cjs --ignore-known=.dependency-cruiser-known-violations.json Material/frontend/src Material/backend/src Kanban-Board/src Kanban-Board/server && depcruise --config Material/backend/.dependency-cruiser.cjs Material/backend/src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/suhana-shivik/Shivik-Project-Kanban-Board.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/suhana-shivik/Shivik-Project-Kanban-Board/issues"
+  },
+  "homepage": "https://github.com/suhana-shivik/Shivik-Project-Kanban-Board#readme",
+  "private": true,
+  "devDependencies": {
+    "dependency-cruiser": "^18.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "typescript": "^5.9.3"
+  }
+}
