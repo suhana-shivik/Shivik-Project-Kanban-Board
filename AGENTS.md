@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **material-nestjs** (1171 symbols, 3522 relationships, 98 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Shivik-Project-Kanban-Board** (10815 symbols, 26413 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -25,10 +25,10 @@ This project is indexed by GitNexus as **material-nestjs** (1171 symbols, 3522 r
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/material-nestjs/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/material-nestjs/clusters` | All functional areas |
-| `gitnexus://repo/material-nestjs/processes` | All execution flows |
-| `gitnexus://repo/material-nestjs/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/Shivik-Project-Kanban-Board/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/Shivik-Project-Kanban-Board/clusters` | All functional areas |
+| `gitnexus://repo/Shivik-Project-Kanban-Board/processes` | All execution flows |
+| `gitnexus://repo/Shivik-Project-Kanban-Board/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 
