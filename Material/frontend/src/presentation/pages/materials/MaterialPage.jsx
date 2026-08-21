@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Filter, Plus, RefreshCw, Search, Upload } from "lucide-react";
+import { Filter, Plus, RefreshCw, Search, Upload, CheckCircle, Code, CheckSquare } from "lucide-react";
 import { AppShell } from "../../components/layout/AppShell";
 import { Modal } from "../../components/common/Modal";
 import { ConfirmDialog } from "../../components/common/ConfirmDialog";
@@ -279,6 +279,18 @@ export function MaterialPage({
     return response;
   }
 
+  const handleApprove = () => {
+    console.log('Approve clicked');
+  };
+
+  const handleGenerateCode = () => {
+    console.log('Generate Code clicked');
+  };
+
+  const handleMarkMerged = () => {
+    console.log('Mark Merged clicked');
+  };
+
   const fatalError = materialError || categoryError || subcategoryError;
 
   const deleteGuardHint =
@@ -312,6 +324,18 @@ export function MaterialPage({
             <button className="button primary" onClick={openAddMaterial}>
               <Plus size={17} />
               Add material
+            </button>
+            <button className="button secondary" onClick={handleApprove}> 
+              <CheckCircle size={16} />
+              Approve
+            </button>
+            <button className="button secondary" onClick={handleGenerateCode}> 
+              <Code size={16} />
+              Generate Code
+            </button>
+            <button className="button secondary" onClick={handleMarkMerged}> 
+              <CheckSquare size={16} />
+              Mark Merged
             </button>
           </div>
         </header>
@@ -391,140 +415,4 @@ export function MaterialPage({
             {selectionLabel && (
               <div className="active-filter">
                 <span>
-                  {selectedSub ? "Sub-category" : "Category"}:{" "}
-                  <strong>{selectionLabel}</strong>
-                </span>
-
-                <div className="active-filter-right">
-                  {nestedCount > 0 && (
-                    <label className="inline-check">
-                      <input
-                        type="checkbox"
-                        checked={includeNested}
-                        onChange={(e) => toggleNested(e.target.checked)}
-                      />
-                      Include {nestedCount} nested
-                    </label>
-                  )}
-                  <button
-                    aria-label="Clear selection"
-                    onClick={() => handleSelect(noSelection)}
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {fatalError && (
-              <div className="api-error">
-                <strong>Unable to load data.</strong>
-                <span>
-                  {fatalError.message ||
-                    "Make sure your backend is running and reachable."}
-                </span>
-              </div>
-            )}
-
-            <MaterialTable
-              materials={materials}
-              subcategories={subcategories}
-              loading={loading}
-              onEdit={openEditMaterial}
-              onDelete={setDeleteMaterialTarget}
-              onToggle={handleToggle}
-            />
-          </section>
-        </section>
-
-      <Modal
-        open={materialModal}
-        title={editingMaterial ? "Edit material" : "Add material"}
-        onClose={() => setMaterialModal(false)}
-        width={720}
-      >
-        <MaterialForm
-          material={editingMaterial}
-          categories={categories}
-          subcategories={subcategories}
-          initialCategoryId={materialPrefill.categoryId}
-          initialSubcategoryId={materialPrefill.subcategoryId}
-          onSubmit={handleMaterialSubmit}
-          onCancel={() => setMaterialModal(false)}
-          submitting={materialSubmitting}
-        />
-      </Modal>
-
-      <Modal
-        open={categoryModal}
-        title={
-          categoryTarget.parentId != null
-            ? "Add sub-category inside this one"
-            : "Add category / sub-category"
-        }
-        onClose={() => setCategoryModal(false)}
-        width={560}
-      >
-        <CategoryForm
-          categories={categories}
-          subcategories={subcategories}
-          initialCategoryId={categoryTarget.categoryId}
-          initialParentId={categoryTarget.parentId}
-          onSubmit={handleCategorySubmit}
-          onCancel={() => setCategoryModal(false)}
-          submitting={categorySubmitting}
-        />
-      </Modal>
-
-      <Modal
-        open={Boolean(editTarget)}
-        title={
-          editTarget?.type === "subcategory"
-            ? "Edit sub-category"
-            : "Edit category"
-        }
-        onClose={() => setEditTarget(null)}
-        width={560}
-      >
-        <CategoryEditForm
-          target={editTarget}
-          categories={categories}
-          subcategories={subcategories}
-          onSubmit={handleEditSubmit}
-          onCancel={() => setEditTarget(null)}
-          submitting={editSubmitting}
-        />
-      </Modal>
-
-      <ConfirmDialog
-        open={Boolean(deleteMaterialTarget)}
-        title="Delete material"
-        message={`Are you sure you want to delete "${deleteMaterialTarget?.name}"? This action cannot be undone.`}
-        onClose={() => setDeleteMaterialTarget(null)}
-        onConfirm={handleDeleteMaterial}
-      />
-
-      <ConfirmDialog
-        open={Boolean(deleteCategoryTarget)}
-        title={
-          deleteCategoryTarget?.type === "subcategory"
-            ? "Delete sub-category"
-            : "Delete category"
-        }
-        message={`Delete "${
-          deleteCategoryTarget?.item?.name ?? ""
-        }"? ${deleteGuardHint}`}
-        onClose={() => setDeleteCategoryTarget(null)}
-        onConfirm={handleDeleteCategory}
-      />
-
-      <BulkImport
-        open={showImport}
-        onClose={() => setShowImport(false)}
-        onImport={handleImport}
-      />
-
-      <Toast toast={toast} onClose={() => setToast(null)} />
-    </AppShell>
-  );
-}
+                  {selectedSub ? "Sub-category" : "Category"}:{
