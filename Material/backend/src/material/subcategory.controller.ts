@@ -16,8 +16,8 @@ import { SubcategoryQueryDto } from './dto/category.dto';
 import {
   CreateSubcategoryDto,
   UpdateSubcategoryDto,
-  CreateSubcategoriesDto,
 } from './dto/subcategory.dto';
+import { CreateSubcategoriesDto } from './dto/bulk-subcategory.dto';
 import { SubcategoryService } from './subcategory.service';
 import { paginate } from '../common/pagination';
 

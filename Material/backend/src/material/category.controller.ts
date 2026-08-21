@@ -18,8 +18,8 @@ import {
   CreateCategoryDto,
   SubcategoryQueryDto,
   UpdateCategoryDto,
-  CreateCategoriesDto,
 } from './dto/category.dto';
+import { CreateCategoriesDto } from './dto/bulk-category.dto';
 import { SubcategoryService } from './subcategory.service';
 import { paginate } from '../common/pagination';
 

@@ -13,6 +13,12 @@ import {
 import { SubcategoryView } from './entities';
 import { SubcategoryRepository } from './subcategory.repository';
 
+/** Where a sub-category ends up once its parent has been validated. */
+interface Placement {
+  categoryId: number;
+  parentId: number | null;
+}
+
 @Injectable()
 export class SubcategoryService {
   constructor(
