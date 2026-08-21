@@ -69,4 +69,10 @@ export class AuthController {
   ) {
     return this.authService.changePassword(user, dto);
   }
+
+  /** Dummy endpoint for testing purposes. */
+  @Get('dummy')
+  dummy() {
+    return 'This is a dummy response.';
+  }
 }

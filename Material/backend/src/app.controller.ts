@@ -12,4 +12,10 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  /** Dummy endpoint */
+  @Get('dummy')
+  getDummy(): string {
+    return 'This is a dummy endpoint';
+  }
 }
