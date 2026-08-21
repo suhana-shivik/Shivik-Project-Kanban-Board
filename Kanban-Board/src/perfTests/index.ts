@@ -19,3 +19,10 @@ export function shouldShowPerfTests(
 }
 
 export { memberDisplayName } from './lorem';
+
+// New Native Pipeline Smoke Test function
+export function runNativePipelineSmokeTest() {
+  // Implementation of the smoke test logic for the native pipeline
+  console.log('Running native pipeline smoke test...');
+  // Add further logic here as needed.
+}
