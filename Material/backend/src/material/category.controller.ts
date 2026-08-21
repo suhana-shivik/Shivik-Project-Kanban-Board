@@ -18,6 +18,7 @@ import {
   CreateCategoryDto,
   SubcategoryQueryDto,
   UpdateCategoryDto,
+  CreateCategoriesDto,
 } from './dto/category.dto';
 import { SubcategoryService } from './subcategory.service';
 import { paginate } from '../common/pagination';
@@ -56,6 +57,12 @@ export class CategoryController {
   @RequirePermissions('category:create')
   create(@Body() dto: CreateCategoryDto) {
     return this.categoryService.create(dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions('category:create')
+  async bulkImport(@Body() dto: CreateCategoriesDto) {
+    return this.categoryService.bulkCreateCategories(dto.categories);
   }
 
   @Put(':id')

@@ -49,11 +49,15 @@ export class CategoryService {
     });
   }
 
-  /**
-   * The FKs are ON DELETE RESTRICT, so the database would refuse this anyway —
-   * checking first is what turns a raw constraint violation into the `reason`
-   * message the frontend already knows how to show.
-   */
+  async bulkCreateCategories(dtos: CreateCategoryDto[]): Promise<Category[]> {
+    const categories: Category[] = [];
+    for (const dto of dtos) {
+      const category = await this.create(dto);
+      categories.push(category);
+    }
+    return categories;
+  }
+
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     const blockers = await this.categories.countDependents(id);

@@ -13,12 +13,6 @@ import {
 import { SubcategoryView } from './entities';
 import { SubcategoryRepository } from './subcategory.repository';
 
-/** Where a sub-category ends up once its parent has been validated. */
-interface Placement {
-  categoryId: number;
-  parentId: number | null;
-}
-
 @Injectable()
 export class SubcategoryService {
   constructor(
@@ -58,6 +52,15 @@ export class SubcategoryService {
     return this.findOne(id);
   }
 
+  async bulkCreateSubcategories(dtos: CreateSubcategoryDto[]): Promise<SubcategoryView[]> {
+    const subcategories: SubcategoryView[] = [];
+    for (const dto of dtos) {
+      const subcategory = await this.create(dto);
+      subcategories.push(subcategory);
+    }
+    return subcategories;
+  }
+
   async replace(
     id: number,
     dto: UpdateSubcategoryDto,
@@ -93,7 +96,6 @@ export class SubcategoryService {
     await this.subcategories.remove(id);
   }
 
-  /** `childAction` differs between a delete and a cross-category move. */
   private async assertNothingAttached(
     id: number,
     childAction: string,
@@ -112,11 +114,6 @@ export class SubcategoryService {
     }
   }
 
-  /**
-   * Works out which category and parent a sub-category belongs to, rejecting
-   * the combinations that would corrupt the tree: an unknown parent, a parent
-   * in a different category, and any move that would form a cycle.
-   */
   private async resolvePlacement(
     dto: CreateSubcategoryDto,
     excludeId?: number,
