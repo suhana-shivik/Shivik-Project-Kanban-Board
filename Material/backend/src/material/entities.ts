@@ -44,3 +44,57 @@ export interface MaterialView extends Material {
   categoryName: string | null;
   subcategoryName: string | null;
 }
+
+/** One quantity drawn against a material — the raw rows behind the report. */
+export interface MaterialConsumption {
+  id: number;
+  materialId: number;
+  quantity: number;
+  /** The calendar date of the draw, as YYYY-MM-DD. */
+  consumedOn: string;
+  note: string | null;
+}
+
+/** Material and category names resolved at read time, like MaterialView. */
+export interface MaterialConsumptionView extends MaterialConsumption {
+  materialCode: string;
+  materialName: string;
+  uom: string;
+  categoryId: number;
+  categoryName: string | null;
+}
+
+/** One material's total for the month. */
+export interface ConsumptionReportLine {
+  materialId: number;
+  code: string;
+  name: string;
+  uom: string;
+  quantity: number;
+  /** How many individual draws make up the total. */
+  entries: number;
+}
+
+/** kg and bags cannot be added together, so subtotals are kept per unit. */
+export interface UomSubtotal {
+  uom: string;
+  quantity: number;
+}
+
+export interface ConsumptionReportCategory {
+  categoryId: number;
+  categoryName: string;
+  lines: ConsumptionReportLine[];
+  totalsByUom: UomSubtotal[];
+}
+
+/** What the report endpoints return — the PDF is this, typeset. */
+export interface ConsumptionReport {
+  /** YYYY-MM */
+  month: string;
+  /** "January 2025" — what the PDF header prints. */
+  monthLabel: string;
+  generatedAt: string;
+  totalEntries: number;
+  categories: ConsumptionReportCategory[];
+}

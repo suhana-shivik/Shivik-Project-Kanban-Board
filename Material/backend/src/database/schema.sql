@@ -238,3 +238,20 @@ CREATE TABLE IF NOT EXISTS materials (
 CREATE UNIQUE INDEX IF NOT EXISTS materials_code_key ON materials (lower(code));
 CREATE INDEX IF NOT EXISTS materials_category_idx ON materials (category_id);
 CREATE INDEX IF NOT EXISTS materials_subcategory_idx ON materials (subcategory_id);
+
+-- ------------------------------------------------------ consumption log ----
+-- One row per quantity drawn against a material. The monthly consumption
+-- report aggregates these by material and category; CASCADE because a draw
+-- against a material that no longer exists has nothing left to report on.
+CREATE TABLE IF NOT EXISTS material_consumptions (
+  id          SERIAL PRIMARY KEY,
+  material_id INTEGER NOT NULL REFERENCES materials (id) ON DELETE CASCADE,
+  -- three decimals covers every unit the UOM list offers (kg, m³, litres...)
+  quantity    NUMERIC(14, 3) NOT NULL CHECK (quantity > 0),
+  -- the calendar date the report buckets on, independent of created_at
+  consumed_on DATE NOT NULL DEFAULT CURRENT_DATE,
+  note        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS material_consumptions_material_idx ON material_consumptions (material_id);
+CREATE INDEX IF NOT EXISTS material_consumptions_consumed_on_idx ON material_consumptions (consumed_on);

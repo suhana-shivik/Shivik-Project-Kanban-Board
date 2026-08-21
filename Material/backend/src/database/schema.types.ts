@@ -1,4 +1,4 @@
-import type { Generated, Kysely, Transaction } from 'kysely';
+import type { ColumnType, Generated, Kysely, Transaction } from 'kysely';
 import type { Status } from '../common/types';
 
 /**
@@ -132,6 +132,20 @@ export interface MaterialsTable {
   createdAt: Generated<Timestamp>;
 }
 
+export interface MaterialConsumptionsTable {
+  id: Generated<number>;
+  materialId: number;
+  /**
+   * NUMERIC comes back from pg as a string to avoid float loss; the
+   * repository turns it into a number at the edge.
+   */
+  quantity: ColumnType<string, number, number>;
+  /** DATE in PostgreSQL: written as 'YYYY-MM-DD', read back as a Date. */
+  consumedOn: ColumnType<Date, string, string>;
+  note: string | null;
+  createdAt: Generated<Timestamp>;
+}
+
 export interface Database {
   roles: RolesTable;
   modules: ModulesTable;
@@ -145,6 +159,7 @@ export interface Database {
   categories: CategoriesTable;
   subcategories: SubcategoriesTable;
   materials: MaterialsTable;
+  materialConsumptions: MaterialConsumptionsTable;
 }
 
 /** What repositories inject. */
